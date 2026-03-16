@@ -1,7 +1,7 @@
 # GopherFetch
 
-I kept running into repos with no README and no easy way to understand what thye did without cloning them and digging around manually. So i built GopherFetch, it is basically an MCP sever that connects directly to Clause Desktop and does that digging for you.
-Just give it a GitHub URL. It fetches the file tress, filters out all the noise (binaries, lock files, `node_modules`, the usual), ranks the files that actually matter and returns a clean Markdown digest. No README?? It builds one for itself.
+I kept running into repos with no README and no easy way to understand what they did without cloning them and digging around manually. So i built GopherFetch, it is basically an MCP sever that connects directly to claude desktop and does that digging for you.
+Just give it a GitHub URL. It fetches the file tree, filters out all the noise (binaries, lock files, `node_modules`, the usual), ranks the files that actually matter and returns a clean Markdown digest. No README?? It builds one for itself.
 It runs locally as of now over stdio, connects claude desktop in under a minuter and works on any public repo.
 
 Built with [FastMCP] and the GitHub REST API.
