@@ -1,0 +1,17 @@
+[project]
+name = "gopherfetch"
+version = "0.1.0"
+description = "MCP server that fetches and digests public GitHub repositories"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+gopherfetch = "server:mcp"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
