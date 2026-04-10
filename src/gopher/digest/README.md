@@ -94,3 +94,7 @@ Or via the installed script:
 ```bash
 gopherdigest
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
