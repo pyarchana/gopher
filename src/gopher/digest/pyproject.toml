@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gopherdigest"
+version = "0.1.0"
+description = "MCP server that digests conversation transcripts via Ollama and stores facts into GopherCache"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+gopherdigest = "gopherdigest.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gopherdigest"]
