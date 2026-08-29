@@ -6,11 +6,16 @@ dist/
 build/
 .venv/
 venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Environment
 .env
 
-# Data files (keep the directory, ignore the content)
-data/context.json
-data/diary.md
+# Data — keep the directory, ignore its contents
+data/*
+!data/.gitkeep
 
 # IDE
 .vscode/
