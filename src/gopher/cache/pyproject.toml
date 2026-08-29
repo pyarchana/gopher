@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gophercache"
+version = "0.1.0"
+description = "Persistent memory MCP server for Claude via context.json and diary.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.scripts]
+gophercache = "server:mcp.run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.hatch.envs.default]
+dependencies = []
