@@ -1,5 +1,6 @@
 import pytest
-from server import parse_repo_url, is_ignored, file_priority_score
+from gopher.fetch.github import parse_repo_url
+from gopher.fetch.sieve import file_priority_score, is_ignored
 
 
 # parse_repo_url
