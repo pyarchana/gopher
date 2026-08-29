@@ -19,7 +19,7 @@ def read_context() -> str:
 
 
 def update_context(key: str, value: str) -> str:
-    """Write a value at a dot-notation path (e.g. 'projects.gophercache.status').
+    """Write a value at a dot-notation path (e.g. 'projects.gopher.status').
     Creates nested keys automatically."""
     keys = key.split(".")
     data = read_context_raw()
@@ -29,7 +29,7 @@ def update_context(key: str, value: str) -> str:
 
 
 def delete_context_key(key: str) -> str:
-    """Delete a key by dot-notation path (e.g. 'projects.gophercache.status')."""
+    """Delete a key by dot-notation path (e.g. 'projects.gopher.status')."""
     keys = key.split(".")
     data = read_context_raw()
     if del_nested(data, keys):
