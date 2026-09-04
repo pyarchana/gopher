@@ -20,7 +20,11 @@ def read_context() -> str:
 
 def update_context(key: str, value: str) -> str:
     """Write a value at a dot-notation path (e.g. 'projects.gopher.status').
-    Creates nested keys automatically."""
+
+    Creates missing sections along the way. Refuses, rather than discarding
+    data, if a key on the path already holds a value instead of a section,
+    or if the final key holds a section that a value would replace. Delete
+    the named key first if you meant to change its shape."""
     keys = key.split(".")
     data = read_context_raw()
     set_nested(data, keys, value)

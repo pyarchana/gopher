@@ -81,3 +81,88 @@ def test_failed_first_write_leaves_no_store_behind(ctx, monkeypatch):
 
     assert not ctx.exists()
     assert list(ctx.parent.iterdir()) == []
+
+
+# set_nested: the normal cases
+
+
+def test_creates_missing_sections():
+    data = {}
+    store.set_nested(data, ["projects", "gopher", "status"], "active")
+    assert data == {"projects": {"gopher": {"status": "active"}}}
+
+
+def test_overwrites_a_value_with_another_value():
+    data = {"a": "old"}
+    store.set_nested(data, ["a"], "new")
+    assert data == {"a": "new"}
+
+
+def test_adds_a_sibling_without_disturbing_others():
+    data = {"projects": {"gopher": "active"}}
+    store.set_nested(data, ["projects", "precedent"], "submitted")
+    assert data == {"projects": {"gopher": "active", "precedent": "submitted"}}
+
+
+# set_nested: refusals (#2)
+
+
+def test_writing_through_a_value_is_refused():
+    """The regression test for #2.
+
+    The old implementation raised TypeError here, and AttributeError on
+    paths a level deeper, both from inside setdefault and neither naming
+    the key that actually caused it.
+    """
+    data = {"projects": "gopher"}
+    with pytest.raises(store.ContextKeyConflict) as exc:
+        store.set_nested(data, ["projects", "status"], "active")
+
+    assert "'projects'" in str(exc.value)
+    assert "delete_context_key" in str(exc.value)
+
+
+def test_refused_write_leaves_the_original_value_intact():
+    data = {"projects": "gopher"}
+    with pytest.raises(store.ContextKeyConflict):
+        store.set_nested(data, ["projects", "status"], "active")
+
+    assert data == {"projects": "gopher"}
+
+
+def test_deep_collision_names_the_offending_prefix():
+    data = {"a": {"b": "scalar"}}
+    with pytest.raises(store.ContextKeyConflict) as exc:
+        store.set_nested(data, ["a", "b", "c", "d"], "x")
+
+    assert "'a.b'" in str(exc.value)
+
+
+def test_overwriting_a_section_with_a_value_is_refused():
+    data = {"projects": {"gopher": "active", "precedent": "submitted"}}
+    with pytest.raises(store.ContextKeyConflict) as exc:
+        store.set_nested(data, ["projects"], "none")
+
+    assert "'projects'" in str(exc.value)
+    assert "2 key(s)" in str(exc.value)
+
+
+def test_refused_overwrite_leaves_the_section_intact():
+    data = {"projects": {"gopher": "active"}}
+    with pytest.raises(store.ContextKeyConflict):
+        store.set_nested(data, ["projects"], "none")
+
+    assert data == {"projects": {"gopher": "active"}}
+
+
+# the conflict surfaces through the tool, not just the helper
+
+
+def test_update_context_tool_reports_the_conflict(ctx):
+    from gopher.cache import tools
+
+    tools.update_context("projects", "gopher")
+    with pytest.raises(store.ContextKeyConflict):
+        tools.update_context("projects.status", "active")
+
+    assert store.read_context_raw() == {"projects": "gopher"}

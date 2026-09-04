@@ -44,10 +44,49 @@ def write_context(data: dict) -> None:
         raise
 
 
+class ContextKeyConflict(Exception):
+    """A write was refused because it would have destroyed existing data.
+
+    Raised rather than resolved silently. Both cases mean the caller is
+    treating a stored value as the wrong shape, and guessing which of the
+    two values they meant to keep is not the store's decision to make.
+    """
+
+
 def set_nested(obj: dict, keys: list[str], value: str) -> None:
-    for key in keys[:-1]:
-        obj = obj.setdefault(key, {})
-    obj[keys[-1]] = value
+    """Set *value* at the dot path *keys*, creating sections as needed.
+
+    Refuses, rather than destroying data, in two cases:
+
+    - a key along the path holds a value instead of a section, so
+      descending through it would mean discarding that value
+    - the final key holds a section, so writing a value there would mean
+      discarding everything under it
+
+    Overwriting a value with another value is the normal case and is
+    always allowed.
+    """
+    for depth, key in enumerate(keys[:-1]):
+        node = obj.get(key)
+        if node is None:
+            node = obj[key] = {}
+        elif not isinstance(node, dict):
+            path = ".".join(keys[: depth + 1])
+            raise ContextKeyConflict(
+                f"cannot set {'.'.join(keys)!r}: {path!r} holds a value, not a "
+                f"section. Delete it first with delete_context_key({path!r})."
+            )
+        obj = node
+
+    last = keys[-1]
+    if isinstance(obj.get(last), dict):
+        path = ".".join(keys)
+        raise ContextKeyConflict(
+            f"cannot set {path!r} to a value: it holds a section with "
+            f"{len(obj[last])} key(s) under it, which would be discarded. "
+            f"Delete it first with delete_context_key({path!r})."
+        )
+    obj[last] = value
 
 
 def del_nested(obj: dict, keys: list[str]) -> bool:
