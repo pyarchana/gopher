@@ -6,6 +6,11 @@ PRIORITY_NAMES or PRIORITY_DIRS.
 
 from pathlib import PurePosixPath
 
+# fmt: off
+# These are grouped by kind on purpose: images, then fonts, then media,
+# archives, binaries, documents. The line breaks carry the meaning, and
+# CONTRIBUTING.md sends contributors here to add rules. Letting the
+# formatter flatten them into one entry per line would lose that.
 IGNORED_DIRS = {
     ".git", ".github", ".idea", ".vscode",
     "node_modules", "venv", ".venv", "env", ".env",
@@ -46,11 +51,13 @@ PRIORITY_NAMES = [
     "README.md", "README.txt", "README.rst",
     ".env.example", "config.py", "settings.py", "config.js",
 ]
+# fmt: on
 
 PRIORITY_DIRS = {"src", "lib", "contracts", "core", "api", "app"}
 
 MAX_FILE_BYTES = 32_000
-TOP_N_FILES    = 10
+TOP_N_FILES = 10
+
 
 def is_ignored(path: str) -> bool:
     parts = PurePosixPath(path).parts
@@ -68,11 +75,11 @@ def is_ignored(path: str) -> bool:
 
 def file_priority_score(item: dict) -> int:
     """Higher score = more important. Used to pick TOP_N_FILES."""
-    path  = item["path"]
-    name  = item.get("name") or PurePosixPath(path).name
-    size  = item.get("size", 0)
+    path = item["path"]
+    name = item.get("name") or PurePosixPath(path).name
+    size = item.get("size", 0)
     score = 0
- 
+
     if name in PRIORITY_NAMES:
         score += 1000
     parts = PurePosixPath(path).parts
@@ -82,8 +89,6 @@ def file_priority_score(item: dict) -> int:
     if 200 < size < 20_000:
         score += size // 100
     elif size >= 20_000:
-        score += 200   # still include, but don't over-rank
- 
+        score += 200  # still include, but don't over-rank
+
     return score
-
-

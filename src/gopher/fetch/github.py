@@ -29,10 +29,7 @@ def gh_headers() -> dict:
 
 def fetch_tree(owner: str, repo: str, client: httpx.Client) -> list[dict]:
     """Return flat list of blob items via the Git Trees API."""
-    repo_meta = client.get(
-        f"https://api.github.com/repos/{owner}/{repo}",
-        headers=gh_headers()
-    )
+    repo_meta = client.get(f"https://api.github.com/repos/{owner}/{repo}", headers=gh_headers())
     repo_meta.raise_for_status()
     default_branch = repo_meta.json().get("default_branch", "main")
 
@@ -57,7 +54,9 @@ def fetch_file_content(owner: str, repo: str, path: str, client: httpx.Client) -
     data = resp.json()
     raw = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
     if len(raw) > MAX_FILE_BYTES:
-        raw = raw[:MAX_FILE_BYTES] + f"\n\n... [truncated — showing first {MAX_FILE_BYTES} chars] ..."
+        raw = (
+            raw[:MAX_FILE_BYTES] + f"\n\n... [truncated — showing first {MAX_FILE_BYTES} chars] ..."
+        )
     return raw
 
 
@@ -84,4 +83,3 @@ def build_tree_string(blobs: list[dict]) -> str:
 
     render(tree)
     return "\n".join(lines)
-

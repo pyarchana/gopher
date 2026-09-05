@@ -23,7 +23,6 @@ def build_extract_prompt(transcript: str) -> str:
         "extract all notable facts, decisions, names, dates, tasks, and key information. "
         "Return ONLY a flat JSON object (no markdown fences, no preamble, no explanation) "
         "where each key is a short snake_case identifier and each value is a concise string. "
-        "Example output: {\"project_name\": \"example\", \"deadline\": \"2026-04-15\"}\n\n"
+        'Example output: {"project_name": "example", "deadline": "2026-04-15"}\n\n'
         f"TRANSCRIPT:\n{transcript}"
     )
-

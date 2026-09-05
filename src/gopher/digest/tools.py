@@ -29,16 +29,12 @@ def digest_transcript(transcript_path: str, gophercache_context_path: str) -> st
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         lines = cleaned.splitlines()
-        cleaned = "\n".join(
-            line for line in lines if not line.startswith("```")
-        ).strip()
+        cleaned = "\n".join(line for line in lines if not line.startswith("```")).strip()
 
     try:
         new_facts: dict = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Ollama did not return valid JSON. Raw response:\n{raw}"
-        ) from exc
+        raise ValueError(f"Ollama did not return valid JSON. Raw response:\n{raw}") from exc
 
     context_file = Path(gophercache_context_path)
     if context_file.exists():

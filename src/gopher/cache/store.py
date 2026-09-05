@@ -65,9 +65,7 @@ def write_context(data: dict) -> None:
     cannot rename across filesystems.
     """
     ensure_data_dir()
-    fd, tmp = tempfile.mkstemp(
-        dir=CONTEXT_FILE.parent, prefix=".context-", suffix=".tmp"
-    )
+    fd, tmp = tempfile.mkstemp(dir=CONTEXT_FILE.parent, prefix=".context-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)

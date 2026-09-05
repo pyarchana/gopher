@@ -30,21 +30,21 @@ def fetch_github_repo(repo_url: str) -> str:
             try:
                 content = fetch_file_content(owner, repo, item["path"], client)
                 lang = PurePosixPath(item["path"]).suffix.lstrip(".")
-                file_sections.append(
-                    f"### `{item['path']}`\n\n```{lang}\n{content}\n```"
-                )
+                file_sections.append(f"### `{item['path']}`\n\n```{lang}\n{content}\n```")
             except Exception as e:
                 file_sections.append(f"### `{item['path']}`\n\n> ⚠️ Could not fetch: {e}")
 
-    stars    = repo_meta.get("stargazers_count", "?")
+    stars = repo_meta.get("stargazers_count", "?")
     language = repo_meta.get("language") or "unknown"
-    desc     = repo_meta.get("description") or "_No description provided._"
+    desc = repo_meta.get("description") or "_No description provided._"
     license_ = (repo_meta.get("license") or {}).get("spdx_id", "unknown")
 
     readme_note = ""
     top_paths = {f["path"].lower() for f in top_files}
     if not any("readme" in p for p in top_paths):
-        readme_note = "\n> ℹ️ **No README detected.** File tree and key source files are shown below.\n"
+        readme_note = (
+            "\n> ℹ️ **No README detected.** File tree and key source files are shown below.\n"
+        )
 
     output = f"""# {owner}/{repo}
 
