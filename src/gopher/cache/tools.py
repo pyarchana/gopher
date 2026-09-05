@@ -4,12 +4,14 @@ import json
 from datetime import datetime
 
 from gopher.cache.store import (
+    append_diary,
     del_nested,
     read_context_raw,
+    read_diary_raw,
     set_nested,
+    split_entries,
     write_context,
 )
-from gopher.config import DIARY_FILE, ensure_data_dir
 
 
 def read_context() -> str:
@@ -44,32 +46,23 @@ def delete_context_key(key: str) -> str:
 
 def log_diary(entry: str, tag: str = "") -> str:
     """Append a timestamped markdown entry to the diary.
+
+    The entry body may contain its own markdown, headings included.
     Optional tag (e.g. 'GSOC', 'GATE') appears in the header."""
-    ensure_data_dir()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     tag_part = f" [{tag}]" if tag else ""
-    block = f"\n## {timestamp}{tag_part}\n\n{entry}\n"
-    with open(DIARY_FILE, "a", encoding="utf-8") as f:
-        f.write(block)
+    append_diary(f"\n## {timestamp}{tag_part}\n\n{entry}\n")
     return f"Logged diary entry at {timestamp}"
 
 
 def read_diary(last_n: int = 10) -> str:
     """Return the last N entries from the diary (default 10)."""
-    if not DIARY_FILE.exists():
+    entries = split_entries(read_diary_raw())
+    if not entries:
         return "(diary is empty)"
-    with open(DIARY_FILE, "r", encoding="utf-8") as f:
-        content = f.read()
-    # Entries start with "## "
-    parts = content.split("\n## ")
-    if not parts:
-        return "(diary is empty)"
-    # Re-attach the header marker to all except the first split fragment
-    entries = [parts[0]] + ["## " + p for p in parts[1:]]
-    # Drop any empty leading fragment before the first entry
-    entries = [e for e in entries if e.strip()]
-    tail = entries[-last_n:]
-    return "\n".join(tail).strip()
+    if last_n <= 0:
+        return "(no entries requested)"
+    return "\n\n".join(entries[-last_n:])
 
 
 def register(mcp) -> None:

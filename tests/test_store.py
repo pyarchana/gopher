@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from gopher.cache import store
+from gopher.cache import store, tools
 
 
 @pytest.fixture
@@ -159,10 +159,93 @@ def test_refused_overwrite_leaves_the_section_intact():
 
 
 def test_update_context_tool_reports_the_conflict(ctx):
-    from gopher.cache import tools
-
     tools.update_context("projects", "gopher")
     with pytest.raises(store.ContextKeyConflict):
         tools.update_context("projects.status", "active")
 
     assert store.read_context_raw() == {"projects": "gopher"}
+
+
+# diary
+
+
+@pytest.fixture
+def diary(tmp_path, monkeypatch):
+    """Point the diary at a throwaway file."""
+    path = tmp_path / "diary.md"
+    monkeypatch.setattr(store, "DIARY_FILE", path)
+    monkeypatch.setattr(store, "ensure_data_dir", lambda: None)
+    return path
+
+
+def test_missing_diary_reads_as_empty(diary):
+    assert store.split_entries(store.read_diary_raw()) == []
+    assert tools.read_diary() == "(diary is empty)"
+
+
+def test_entries_are_split_one_per_header(diary):
+    tools.log_diary("first")
+    tools.log_diary("second")
+    tools.log_diary("third")
+
+    assert len(store.split_entries(store.read_diary_raw())) == 3
+
+
+def test_an_entry_containing_an_h2_stays_one_entry(diary):
+    """The regression test for #3.
+
+    The old implementation split on the literal "\\n## ", so this produced
+    two entries and the timestamp header was severed from its own body.
+    """
+    tools.log_diary("## Notes\n\nsomething worth keeping")
+
+    entries = store.split_entries(store.read_diary_raw())
+    assert len(entries) == 1
+    assert "## Notes" in entries[0]
+    assert "something worth keeping" in entries[0]
+
+
+def test_several_headings_in_one_body_still_one_entry(diary):
+    tools.log_diary("## One\n\ntext\n\n## Two\n\nmore\n\n### Three\n\nend")
+
+    assert len(store.split_entries(store.read_diary_raw())) == 1
+
+
+def test_tagged_headers_are_recognised(diary):
+    tools.log_diary("body", tag="GSOC")
+    tools.log_diary("body", tag="GATE")
+
+    entries = store.split_entries(store.read_diary_raw())
+    assert len(entries) == 2
+    assert "[GSOC]" in entries[0]
+    assert "[GATE]" in entries[1]
+
+
+def test_read_diary_returns_the_last_n(diary):
+    for i in range(5):
+        tools.log_diary(f"entry {i}")
+
+    out = tools.read_diary(2)
+    assert "entry 3" in out
+    assert "entry 4" in out
+    assert "entry 0" not in out
+
+
+def test_read_diary_asking_for_more_than_exists(diary):
+    tools.log_diary("only one")
+    assert "only one" in tools.read_diary(50)
+
+
+def test_read_diary_zero_returns_nothing(diary):
+    """entries[-0:] is entries[0:], so the old code returned everything."""
+    tools.log_diary("secret")
+    assert "secret" not in tools.read_diary(0)
+
+
+def test_text_before_the_first_header_is_not_an_entry(diary):
+    diary.write_text("hand written preamble\n", encoding="utf-8")
+    tools.log_diary("real entry")
+
+    entries = store.split_entries(store.read_diary_raw())
+    assert len(entries) == 1
+    assert "preamble" not in entries[0]

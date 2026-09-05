@@ -2,9 +2,46 @@
 
 import json
 import os
+import re
 import tempfile
 
-from gopher.config import CONTEXT_FILE, ensure_data_dir
+from gopher.config import CONTEXT_FILE, DIARY_FILE, ensure_data_dir
+
+#: An entry header, as written by log_diary: "## <timestamp>" with an
+#: optional " [TAG]". Anchoring on the timestamp is what stops an H2 inside
+#: an entry body from being mistaken for the start of a new entry.
+ENTRY_HEADER = re.compile(
+    r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?: \[[^\n]*\])?$",
+    re.MULTILINE,
+)
+
+
+def append_diary(block: str) -> None:
+    ensure_data_dir()
+    with open(DIARY_FILE, "a", encoding="utf-8") as f:
+        f.write(block)
+
+
+def read_diary_raw() -> str:
+    if not DIARY_FILE.exists():
+        return ""
+    return DIARY_FILE.read_text(encoding="utf-8")
+
+
+def split_entries(content: str) -> list[str]:
+    """Split diary text into entries, one per timestamped header.
+
+    Splits only on headers that match the format log_diary writes, so an
+    entry whose body contains its own markdown headings stays intact.
+
+    Text before the first header is not part of any entry and is skipped;
+    that only happens if the file has been hand edited.
+    """
+    starts = [m.start() for m in ENTRY_HEADER.finditer(content)]
+    if not starts:
+        return []
+    bounds = [*starts, len(content)]
+    return [content[bounds[i] : bounds[i + 1]].strip() for i in range(len(starts))]
 
 
 def read_context_raw() -> dict:
