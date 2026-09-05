@@ -17,6 +17,16 @@ uv pip install -e ".[dev]"
 uv run pytest
 ```
 
+## Linting
+
+```bash
+uvx ruff check .
+uvx ruff format .
+```
+
+CI runs the tests on Python 3.11 through 3.14 and checks lint and formatting,
+so it is worth running both locally before opening a pull request.
+
 ## Guidelines
 
 - Keep the sieve logic in the `IGNORED_*` constants at the top of `src/gopher/fetch/sieve.py`

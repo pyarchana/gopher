@@ -1,5 +1,7 @@
 # Gopher
 
+[![CI](https://github.com/pyarchana/gopher/actions/workflows/ci.yml/badge.svg)](https://github.com/pyarchana/gopher/actions/workflows/ci.yml)
+
 One MCP server that fetches, caches, and digests context for Claude.
 
 Gopher is three things that used to be three separate servers:
@@ -86,7 +88,11 @@ Restart Claude Desktop afterwards.
 
 ```bash
 uv run pytest
+uvx ruff check .
+uvx ruff format .
 ```
+
+CI runs all three on every push and pull request, against Python 3.11 through 3.14.
 
 ---
 

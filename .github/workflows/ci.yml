@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python = ">=3.11", so test what it claims.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    name: test (py${{ matrix.python-version }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Mirrors the setup documented in CONTRIBUTING.md, so a green run
+      # here means the instructions a contributor follows actually work.
+      - run: uv venv --python ${{ matrix.python-version }}
+      - run: uv pip install -e ".[dev]"
+      - run: uv run pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Pinned: an unpinned ruff turns someone else's release into a
+      # failing build on a commit that changed nothing.
+      - run: uvx ruff@0.16.6 check .
+      - run: uvx ruff@0.16.6 format --check .
