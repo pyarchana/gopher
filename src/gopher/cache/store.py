@@ -1,5 +1,6 @@
 """Read/write layer for the context store and diary."""
 
+import contextlib
 import json
 import os
 import re
@@ -47,7 +48,7 @@ def split_entries(content: str) -> list[str]:
 def read_context_raw() -> dict:
     if not CONTEXT_FILE.exists():
         return {}
-    with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
+    with open(CONTEXT_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -74,10 +75,8 @@ def write_context(data: dict) -> None:
             os.fsync(f.fileno())
         os.replace(tmp, CONTEXT_FILE)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
 
 

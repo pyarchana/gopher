@@ -29,3 +29,14 @@ packages = ["src/gopher"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# E/F are the pyflakes and pycodestyle basics, I sorts imports, UP keeps
+# syntax current, B and SIM and PIE catch real bugs and dead weight.
+# E501 is left to the formatter rather than reported twice.
+select = ["E", "F", "I", "UP", "B", "SIM", "PIE"]
+ignore = ["E501"]

@@ -9,6 +9,7 @@ import httpx
 
 from gopher.fetch.sieve import MAX_FILE_BYTES
 
+
 def parse_repo_url(url: str) -> tuple[str, str]:
     """Extract owner and repo name from a GitHub URL."""
     url = url.rstrip("/")

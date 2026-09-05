@@ -63,9 +63,7 @@ def is_ignored(path: str) -> bool:
     ext = PurePosixPath(filename).suffix.lower()
     if ext in IGNORED_EXTENSIONS:
         return True
-    if filename.endswith(".min.js") or filename.endswith(".min.css"):
-        return True
-    return False
+    return filename.endswith((".min.js", ".min.css"))
 
 
 def file_priority_score(item: dict) -> int:

@@ -1,7 +1,7 @@
 """MCP tools for digesting transcripts into the context store."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gopher.config import DIGEST_LOG, ensure_data_dir
@@ -10,7 +10,7 @@ from gopher.digest.ollama import build_extract_prompt, call_ollama
 
 def append_log(entry: str) -> None:
     ensure_data_dir()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     with open(DIGEST_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n## {timestamp}\n\n{entry}\n")
 
