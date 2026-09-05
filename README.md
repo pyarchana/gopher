@@ -60,10 +60,7 @@ Add this to `claude_desktop_config.json` (`%APPDATA%\Claude\` on Windows, `~/Lib
   "mcpServers": {
     "gopher": {
       "command": "uv",
-      "args": ["run", "--project", "/absolute/path/to/gopher", "gopher"],
-      "env": {
-        "GITHUB_TOKEN": "your_token_here"
-      }
+      "args": ["run", "--project", "/absolute/path/to/gopher", "gopher"]
     }
   }
 }
@@ -71,9 +68,27 @@ Add this to `claude_desktop_config.json` (`%APPDATA%\Claude\` on Windows, `~/Lib
 
 Restart Claude Desktop afterwards.
 
+For Claude Code, register it once and it is available in every session:
+
+```bash
+claude mcp add gopher --scope user -- uv run --project /absolute/path/to/gopher gopher
+```
+
 ---
 
 ## Configuration
+
+Settings come from a `.env` file in the project root, which the server loads on
+startup:
+
+```bash
+cp .env.example .env
+```
+
+Put your `GITHUB_TOKEN` there rather than in `claude_desktop_config.json`. The
+config file gets screenshotted, synced between machines and pasted into issues;
+`.env` is gitignored and stays put. Anything set in the client config still wins
+if you prefer that route.
 
 | Variable | Default | Purpose |
 |---|---|---|

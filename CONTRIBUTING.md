@@ -17,6 +17,14 @@ uv pip install -e ".[dev]"
 uv run pytest
 ```
 
+If that fails with a file lock on `Scripts/gopher.exe`, you have the server
+registered in a running Claude client, which holds the executable open so uv
+cannot reinstall over it. Skip the reinstall:
+
+```bash
+uv run --no-sync pytest
+```
+
 ## Linting
 
 ```bash
