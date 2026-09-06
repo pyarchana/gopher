@@ -4,10 +4,21 @@ import base64
 import os
 import re
 from pathlib import PurePosixPath
+from typing import NamedTuple
 
 import httpx
 
 from gopher.fetch.sieve import MAX_FILE_BYTES
+
+
+class RepoTree(NamedTuple):
+    """A repository's file list, plus what we know about its completeness."""
+
+    blobs: list[dict]
+    meta: dict
+    branch: str
+    truncated: bool
+    """True when GitHub capped the tree and blobs is only part of the repo."""
 
 
 def parse_repo_url(url: str) -> tuple[str, str]:
@@ -27,8 +38,15 @@ def gh_headers() -> dict:
     return h
 
 
-def fetch_tree(owner: str, repo: str, client: httpx.Client) -> list[dict]:
-    """Return flat list of blob items via the Git Trees API."""
+def fetch_tree(owner: str, repo: str, client: httpx.Client) -> RepoTree:
+    """Return the repository's blobs via the Git Trees API.
+
+    GitHub caps a recursive tree response and sets ``truncated`` when it
+    does, at which point the list is some arbitrary prefix of the repo.
+    That flag is carried out on the result rather than dropped, because a
+    partial file list rendered as a complete directory tree is a wrong
+    answer that looks like a right one.
+    """
     repo_meta = client.get(f"https://api.github.com/repos/{owner}/{repo}", headers=gh_headers())
     repo_meta.raise_for_status()
     default_branch = repo_meta.json().get("default_branch", "main")
@@ -42,7 +60,12 @@ def fetch_tree(owner: str, repo: str, client: httpx.Client) -> list[dict]:
     data = tree_resp.json()
 
     blobs = [item for item in data.get("tree", []) if item["type"] == "blob"]
-    return blobs, repo_meta.json(), default_branch
+    return RepoTree(
+        blobs=blobs,
+        meta=repo_meta.json(),
+        branch=default_branch,
+        truncated=bool(data.get("truncated", False)),
+    )
 
 
 def fetch_file_content(owner: str, repo: str, path: str, client: httpx.Client) -> str:
@@ -55,7 +78,7 @@ def fetch_file_content(owner: str, repo: str, path: str, client: httpx.Client) -
     raw = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
     if len(raw) > MAX_FILE_BYTES:
         raw = (
-            raw[:MAX_FILE_BYTES] + f"\n\n... [truncated — showing first {MAX_FILE_BYTES} chars] ..."
+            raw[:MAX_FILE_BYTES] + f"\n\n... [truncated, showing first {MAX_FILE_BYTES} chars] ..."
         )
     return raw
 
