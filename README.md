@@ -94,6 +94,7 @@ if you prefer that route.
 |---|---|---|
 | `GITHUB_TOKEN` | none | Optional. Raises the GitHub rate limit from 60 to 5,000 requests/hour. |
 | `GOPHER_DATA_DIR` | `./data` | Where `context.json`, `diary.md`, and `digest_log.md` live. |
+| `GOPHER_DIGEST_BUDGET` | `40000` | Maximum characters a repo digest may return. Raise it if your client accepts larger tool results, lower it to save context. |
 | `GOPHER_OLLAMA_URL` | `http://localhost:11434/api/generate` | Ollama endpoint. |
 | `GOPHER_OLLAMA_MODEL` | `llama3.2` | Model used for fact extraction. |
 
