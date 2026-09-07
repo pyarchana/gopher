@@ -4,20 +4,33 @@ from pathlib import PurePosixPath
 
 import httpx
 
+from gopher.config import DIGEST_BUDGET
 from gopher.fetch.github import (
     build_tree_string,
     fetch_file_content,
     fetch_tree,
     parse_repo_url,
 )
-from gopher.fetch.sieve import TOP_N_FILES, file_priority_score, is_ignored
+from gopher.fetch.sieve import (
+    HEADER_RESERVE,
+    MAX_FILE_FRACTION,
+    MAX_FILES,
+    MIN_FILE_CHARS,
+    TREE_BUDGET_FRACTION,
+    file_priority_score,
+    is_ignored,
+)
 
 
-def build_digest(repo_url: str, client: httpx.Client) -> str:
+def build_digest(repo_url: str, client: httpx.Client, budget: int = DIGEST_BUDGET) -> str:
     """Build the markdown digest using a caller-supplied HTTP client.
 
-    Split out from the tool so tests can hand it a mock transport instead
-    of reaching the network.
+    Fills *budget* characters, tree first and then files in priority order,
+    and stops. A digest larger than the caller can accept is rejected
+    whole, so returning less is the only way to return anything at all.
+
+    Split out from the tool so tests can hand it a mock transport and a
+    small budget instead of reaching the network.
     """
     owner, repo = parse_repo_url(repo_url)
 
@@ -25,18 +38,40 @@ def build_digest(repo_url: str, client: httpx.Client) -> str:
     repo_meta, default_branch = tree.meta, tree.branch
 
     filtered = [b for b in tree.blobs if not is_ignored(b["path"])]
-    tree_str = build_tree_string(filtered)
+
+    tree_str = build_tree_string(filtered, max_chars=int(budget * TREE_BUDGET_FRACTION))
+    file_budget = max(budget - len(tree_str) - HEADER_RESERVE, 0)
+    per_file_cap = int(file_budget * MAX_FILE_FRACTION)
+
     ranked = sorted(filtered, key=file_priority_score, reverse=True)
-    top_files = ranked[:TOP_N_FILES]
 
     file_sections: list[str] = []
-    for item in top_files:
+    included_paths: list[str] = []
+    spent = 0
+    included = 0
+    for item in ranked:
+        if included >= MAX_FILES:
+            break
+        cap = min(per_file_cap, file_budget - spent)
+        if cap < MIN_FILE_CHARS:
+            break
         try:
-            content = fetch_file_content(owner, repo, item["path"], client)
-            lang = PurePosixPath(item["path"]).suffix.lstrip(".")
-            file_sections.append(f"### `{item['path']}`\n\n```{lang}\n{content}\n```")
+            content = fetch_file_content(owner, repo, item["path"], client, max_chars=cap)
         except Exception as e:
-            file_sections.append(f"### `{item['path']}`\n\n> ⚠️ Could not fetch: {e}")
+            section = f"### `{item['path']}`\n\n> ⚠️ Could not fetch: {e}"
+            file_sections.append(section)
+            spent += len(section)
+            continue
+        if len(content.strip()) < MIN_FILE_CHARS:
+            continue
+        lang = PurePosixPath(item["path"]).suffix.lstrip(".")
+        section = f"### `{item['path']}`\n\n```{lang}\n{content}\n```"
+        file_sections.append(section)
+        included_paths.append(item["path"])
+        spent += len(section)
+        included += 1
+
+    omitted = max(len(ranked) - included, 0)
 
     stars = repo_meta.get("stargazers_count", "?")
     language = repo_meta.get("language") or "unknown"
@@ -44,11 +79,14 @@ def build_digest(repo_url: str, client: httpx.Client) -> str:
     license_ = (repo_meta.get("license") or {}).get("spdx_id", "unknown")
 
     readme_note = ""
-    top_paths = {f["path"].lower() for f in top_files}
-    if not any("readme" in p for p in top_paths):
+    if not any("readme" in p.lower() for p in included_paths):
         readme_note = (
             "\n> ℹ️ **No README detected.** File tree and key source files are shown below.\n"
         )
+
+    budget_note = ""
+    if omitted:
+        budget_note = f", {omitted:,} omitted to fit {budget:,} chars"
 
     # A capped listing rendered as a full tree is a wrong answer wearing the
     # costume of a right one, so say so before showing anything.
@@ -84,7 +122,7 @@ def build_digest(repo_url: str, client: httpx.Client) -> str:
 
 ---
 
-## Top {len(file_sections)} Files
+## Files ({included} of {len(ranked)} shown{budget_note})
 
 {chr(10).join(file_sections)}
 """

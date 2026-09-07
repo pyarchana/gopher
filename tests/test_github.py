@@ -111,3 +111,80 @@ def test_the_warning_comes_before_the_tree():
     out = _digest({"tree": _blobs("main.py"), "truncated": True})
 
     assert out.index("Partial listing") < out.index("Directory Tree")
+
+
+# the budget (#5)
+
+
+def _big_repo(n_files=200, file_chars=5_000):
+    payload = {"tree": _blobs(*[f"src/mod{i}/file{i}.py" for i in range(n_files)])}
+    return payload, "x" * file_chars
+
+
+def _digest_within(budget, n_files=200, file_chars=5_000):
+    payload, text = _big_repo(n_files, file_chars)
+    with _client(payload, file_text=text) as c:
+        return tools.build_digest("https://github.com/o/r", c, budget=budget)
+
+
+def test_digest_stays_within_budget():
+    """The regression test for #5.
+
+    With a fixed count of 10 files this returned whatever those 10 happened
+    to weigh. Measured against real repos that ranged from 4,594 characters
+    to 228,310, and anything over the client's limit was rejected whole.
+    """
+    for budget in (10_000, 20_000, 40_000):
+        out = _digest_within(budget)
+        assert len(out) <= budget, f"{len(out)} exceeded {budget}"
+
+
+def test_a_bigger_budget_returns_more():
+    small = _digest_within(10_000)
+    large = _digest_within(40_000)
+    assert len(large) > len(small)
+
+
+def test_the_tree_alone_cannot_eat_the_budget():
+    """uv's tree measured 65,530 characters on its own."""
+    out = _digest_within(20_000, n_files=5_000)
+    tree_block = out.split("```")[1]
+    assert len(tree_block) <= 20_000 * 0.25 + 200
+    assert "more entries, omitted" in tree_block
+
+
+def test_omitted_files_are_counted_in_the_heading():
+    out = _digest_within(10_000, n_files=200)
+    assert "omitted to fit 10,000 chars" in out
+
+
+def test_a_small_repo_omits_nothing_and_says_nothing():
+    payload = {"tree": _blobs("main.py", "README.md")}
+    with _client(payload, file_text="real content, comfortably above the minimum floor" * 3) as c:
+        out = tools.build_digest("https://github.com/o/r", c, budget=40_000)
+
+    assert "omitted" not in out
+    assert "2 of 2 shown" in out
+
+
+def test_one_huge_file_cannot_crowd_out_the_rest():
+    """Seven translated READMEs once filled 224,000 characters of one digest."""
+    payload = {"tree": _blobs("a.md", "b.md", "c.md", "d.md")}
+    with _client(payload, file_text="y" * 500_000) as c:
+        out = tools.build_digest("https://github.com/o/r", c, budget=20_000)
+
+    assert len(out) <= 20_000
+    assert out.count("### `") >= 2, "one file consumed everything"
+
+
+def test_files_below_the_floor_are_skipped():
+    payload = {"tree": _blobs("main.py", "README.md")}
+    with _client(payload, file_text="") as c:
+        out = tools.build_digest("https://github.com/o/r", c, budget=40_000)
+
+    assert "0 of 2 shown" in out
+
+
+def test_the_file_count_is_no_longer_fixed_at_ten():
+    out = _digest_within(40_000, n_files=200, file_chars=300)
+    assert out.count("### `") > 10

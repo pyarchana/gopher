@@ -8,8 +8,6 @@ from typing import NamedTuple
 
 import httpx
 
-from gopher.fetch.sieve import MAX_FILE_BYTES
-
 
 class RepoTree(NamedTuple):
     """A repository's file list, plus what we know about its completeness."""
@@ -68,7 +66,14 @@ def fetch_tree(owner: str, repo: str, client: httpx.Client) -> RepoTree:
     )
 
 
-def fetch_file_content(owner: str, repo: str, path: str, client: httpx.Client) -> str:
+def fetch_file_content(
+    owner: str, repo: str, path: str, client: httpx.Client, max_chars: int | None = None
+) -> str:
+    """Fetch one file, optionally trimmed to *max_chars*.
+
+    Sizing is the caller's decision because only the caller knows how much
+    of the digest budget is left.
+    """
     resp = client.get(
         f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
         headers=gh_headers(),
@@ -76,15 +81,21 @@ def fetch_file_content(owner: str, repo: str, path: str, client: httpx.Client) -
     resp.raise_for_status()
     data = resp.json()
     raw = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
-    if len(raw) > MAX_FILE_BYTES:
+    if max_chars is not None and len(raw) > max_chars:
         raw = (
-            raw[:MAX_FILE_BYTES] + f"\n\n... [truncated, showing first {MAX_FILE_BYTES} chars] ..."
+            raw[:max_chars]
+            + f"\n\n... [trimmed, showing first {max_chars:,} of {len(raw):,} chars]"
         )
     return raw
 
 
-def build_tree_string(blobs: list[dict]) -> str:
-    """Render an ASCII directory tree from a flat blob list."""
+def build_tree_string(blobs: list[dict], max_chars: int | None = None) -> str:
+    """Render an ASCII directory tree from a flat blob list.
+
+    With *max_chars* the render stops at a line boundary and says how many
+    entries it left out, rather than letting the tree alone consume the
+    whole digest.
+    """
     tree: dict = {}
     for b in blobs:
         parts = PurePosixPath(b["path"]).parts
@@ -105,4 +116,16 @@ def build_tree_string(blobs: list[dict]) -> str:
                 render(child, prefix + extension)
 
     render(tree)
-    return "\n".join(lines)
+
+    if max_chars is None:
+        return "\n".join(lines)
+
+    kept: list[str] = []
+    used = 0
+    for i, line in enumerate(lines):
+        if used + len(line) + 1 > max_chars:
+            kept.append(f"... and {len(lines) - i:,} more entries, omitted to fit the digest")
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept)

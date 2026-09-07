@@ -55,8 +55,32 @@ PRIORITY_NAMES = [
 
 PRIORITY_DIRS = {"src", "lib", "contracts", "core", "api", "app"}
 
-MAX_FILE_BYTES = 32_000
-TOP_N_FILES = 10
+# How the digest budget in config.DIGEST_BUDGET gets divided up. These are
+# fractions rather than fixed sizes so that changing the budget moves all
+# of them together.
+
+#: Share of the budget the directory tree may occupy. Measured at 65,530
+#: characters for astral-sh/uv and 57,306 for the MCP python-sdk, which is
+#: why the tree needs a cap of its own and not just the file content.
+TREE_BUDGET_FRACTION = 0.25
+
+#: Most of the remaining budget any single file may take. Without this one
+#: large file crowds out everything else: seven translated copies of the
+#: same README once filled 224,000 characters of a single digest.
+MAX_FILE_FRACTION = 0.40
+
+#: Ceiling on files fetched, regardless of budget. Each one is an API call,
+#: and unauthenticated GitHub allows only 60 an hour.
+MAX_FILES = 30
+
+#: Below this a file contributes nothing worth an API call.
+MIN_FILE_CHARS = 50
+
+#: Held back for everything that is neither tree nor file content: the
+#: title, description, metadata table, and the partial-listing and missing
+#: README notices. Measured at roughly 460 characters, with headroom for a
+#: long repo description.
+HEADER_RESERVE = 1_200
 
 
 def is_ignored(path: str) -> bool:
