@@ -43,7 +43,7 @@ def build_digest(repo_url: str, client: httpx.Client, budget: int = DIGEST_BUDGE
     file_budget = max(budget - len(tree_str) - HEADER_RESERVE, 0)
     per_file_cap = int(file_budget * MAX_FILE_FRACTION)
 
-    ranked = sorted(filtered, key=file_priority_score, reverse=True)
+    ranked = sorted(filtered, key=lambda i: file_priority_score(i, repo_meta), reverse=True)
 
     file_sections: list[str] = []
     included_paths: list[str] = []

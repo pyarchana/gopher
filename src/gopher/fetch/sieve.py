@@ -4,6 +4,7 @@ New ignore rules go in the IGNORED_* sets; new ranking rules go in
 PRIORITY_NAMES or PRIORITY_DIRS.
 """
 
+import re
 from pathlib import PurePosixPath
 
 # fmt: off
@@ -55,6 +56,52 @@ PRIORITY_NAMES = [
 
 PRIORITY_DIRS = {"src", "lib", "contracts", "core", "api", "app"}
 
+# fmt: off
+#: Directories holding fixtures rather than the project's own code. Heavily
+#: demoted: uv's digest once spent 89,000 characters on other projects'
+#: dependency files pulled from test/ecosystem/.
+TEST_DIRS = {
+    "test", "tests", "testing", "spec", "specs",
+    "fixture", "fixtures", "testdata", "test_data",
+    "benchmark", "benchmarks", "bench",
+}
+
+#: Vendored copies of other people's code. Never the answer to "what is
+#: this repository".
+VENDOR_DIRS = {"vendor", "third_party", "thirdparty", "external", "extern", "deps"}
+
+#: Demoted, but only gently. An examples directory is sometimes the best
+#: documentation a project has.
+EXAMPLE_DIRS = {"example", "examples", "sample", "samples", "demo", "demos"}
+
+#: Extensions that count as the repository's primary language, keyed by the
+#: name GitHub reports in the repo metadata.
+LANGUAGE_EXTENSIONS = {
+    "python": {".py", ".pyi"},
+    "rust": {".rs"},
+    "typescript": {".ts", ".tsx"},
+    "javascript": {".js", ".jsx", ".mjs"},
+    "go": {".go"},
+    "java": {".java"},
+    "kotlin": {".kt", ".kts"},
+    "c++": {".cpp", ".cc", ".cxx", ".hpp"},
+    "c": {".c", ".h"},
+    "c#": {".cs"},
+    "ruby": {".rb"},
+    "php": {".php"},
+    "swift": {".swift"},
+    "shell": {".sh", ".bash"},
+}
+
+#: Documents that commonly ship translated copies. Only these get the
+#: locale check, so a source file like `parse-db.py` is not mistaken for
+#: a translation of `parse`.
+LOCALISABLE_DOCS = {"readme", "contributing", "changelog", "license", "code_of_conduct"}
+# fmt: on
+
+#: A trailing locale tag: README-ja, README-zh_TW, README-pt_BR, README-fa-ir.
+LOCALE_SUFFIX = re.compile(r"^(.*?)[-_][a-z]{2}(?:[-_][a-z]{2,4})?$", re.IGNORECASE)
+
 # How the digest budget in config.DIGEST_BUDGET gets divided up. These are
 # fractions rather than fixed sizes so that changing the budget moves all
 # of them together.
@@ -97,22 +144,57 @@ def is_ignored(path: str) -> bool:
     return filename.endswith((".min.js", ".min.css"))
 
 
-def file_priority_score(item: dict) -> int:
-    """Higher score = more important. Used to pick TOP_N_FILES."""
+def _is_translation(stem: str) -> bool:
+    """True for a locale-tagged copy of a document, like README-ja."""
+    m = LOCALE_SUFFIX.match(stem)
+    return bool(m) and m.group(1).lower() in LOCALISABLE_DOCS
+
+
+def file_priority_score(item: dict, meta: dict | None = None) -> int:
+    """Higher score means more worth including in a digest.
+
+    *meta* is the repository payload from the API. Only ``language`` is
+    used, to favour files written in whatever the repository is mostly
+    written in.
+    """
     path = item["path"]
     name = item.get("name") or PurePosixPath(path).name
     size = item.get("size", 0)
+    parts = PurePosixPath(path).parts
+    dirs = {p.lower() for p in parts[:-1]}
+    depth = len(parts) - 1
     score = 0
 
+    # A priority name is worth less the deeper it sits. The root
+    # pyproject.toml describes the project; test/ecosystem/pandas/
+    # pyproject.toml describes pandas.
     if name in PRIORITY_NAMES:
-        score += 1000
-    parts = PurePosixPath(path).parts
+        score += 1000 // (1 + depth)
+
     if any(p in PRIORITY_DIRS for p in parts):
         score += 300
+
+    # Files in the repository's own language say more about it than its
+    # build files do, which is how a Rust project ended up digested as a
+    # list of Python dependencies.
+    language = (meta or {}).get("language") or ""
+    suffixes = LANGUAGE_EXTENSIONS.get(language.lower())
+    if suffixes and PurePosixPath(name).suffix.lower() in suffixes:
+        score += 250
+
     # reward reasonable size (not empty, not huge minified blob)
     if 200 < size < 20_000:
         score += size // 100
     elif size >= 20_000:
         score += 200  # still include, but don't over-rank
+
+    if dirs & VENDOR_DIRS:
+        score -= 900
+    if dirs & TEST_DIRS:
+        score -= 700
+    if dirs & EXAMPLE_DIRS:
+        score -= 250
+    if _is_translation(PurePosixPath(name).stem):
+        score -= 700
 
     return score
