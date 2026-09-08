@@ -1,7 +1,13 @@
 """Filtering and ranking rules. This is the tuning surface for repo digests.
 
-New ignore rules go in the IGNORED_* sets; new ranking rules go in
-PRIORITY_NAMES or PRIORITY_DIRS.
+New ignore rules go in the IGNORED_* sets. Ranking is split between
+things that promote a file (PRIORITY_NAMES, PRIORITY_DIRS,
+LANGUAGE_EXTENSIONS) and things that demote one (TEST_DIRS, VENDOR_DIRS,
+EXAMPLE_DIRS, LOCALISABLE_DOCS).
+
+Scoring changes are easy to talk yourself into and hard to judge by
+reading. Measure a change against several real repositories before and
+after, rather than reasoning about it.
 """
 
 import re

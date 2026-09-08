@@ -38,5 +38,8 @@ so it is worth running both locally before opening a pull request.
 ## Guidelines
 
 - Keep the sieve logic in the `IGNORED_*` constants at the top of `src/gopher/fetch/sieve.py`
-- New file priority rules go in `PRIORITY_NAMES` or `PRIORITY_DIRS`
+- Rules that promote a file go in `PRIORITY_NAMES`, `PRIORITY_DIRS` or `LANGUAGE_EXTENSIONS`
+- Rules that demote one go in `TEST_DIRS`, `VENDOR_DIRS`, `EXAMPLE_DIRS` or `LOCALISABLE_DOCS`
+- Measure a scoring change against several real repositories before and after. It is
+  easy to talk yourself into a ranking rule that reads well and picks worse files
 - Keep the tool interface to a single clean output string, no side effects
