@@ -188,3 +188,94 @@ def test_files_below_the_floor_are_skipped():
 def test_the_file_count_is_no_longer_fixed_at_ten():
     out = _digest_within(40_000, n_files=200, file_chars=300)
     assert out.count("### `") > 10
+
+
+# files the contents endpoint will not serve (#15)
+
+
+def _oversized_handler(blob_text, calls):
+    """Mimic GitHub refusing a file over 1MB, then serving it as a blob."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        calls.append(path)
+        if "/git/blobs/" in path:
+            return httpx.Response(
+                200,
+                json={
+                    "content": base64.b64encode(blob_text.encode()).decode(),
+                    "encoding": "base64",
+                },
+            )
+        if "/contents/" in path:
+            # what GitHub actually returns: 200, empty body, encoding "none"
+            return httpx.Response(
+                200, json={"content": "", "encoding": "none", "size": 1_616_144, "sha": "abc123"}
+            )
+        return httpx.Response(200, json={"default_branch": "main"})
+
+    return handle
+
+
+def test_a_file_too_large_for_contents_falls_back_to_blobs():
+    """The regression test for #15.
+
+    punkpeye/awesome-mcp-servers has a 1,616,144 byte README. The contents
+    endpoint answered 200 with an empty body, the decode produced "", and
+    the highest-ranked file in that repo silently vanished.
+    """
+    calls: list[str] = []
+    with httpx.Client(
+        transport=httpx.MockTransport(_oversized_handler("real content", calls))
+    ) as c:
+        got = github.fetch_file_content("o", "r", "README.md", c)
+
+    assert got == "real content"
+    assert any("/git/blobs/abc123" in p for p in calls)
+
+
+def test_the_fallback_still_respects_the_cap():
+    calls: list[str] = []
+    with httpx.Client(transport=httpx.MockTransport(_oversized_handler("z" * 5_000, calls))) as c:
+        got = github.fetch_file_content("o", "r", "README.md", c, max_chars=100)
+
+    assert got.startswith("z" * 100)
+    assert "trimmed, showing first 100 of 5,000 chars" in got
+
+
+def test_a_normal_file_does_not_touch_the_blobs_endpoint():
+    """The fallback is an extra API call, so it must not fire routinely."""
+    calls: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if "/contents/" in request.url.path:
+            return httpx.Response(
+                200,
+                json={
+                    "content": base64.b64encode(b"small file").decode(),
+                    "encoding": "base64",
+                    "size": 10,
+                },
+            )
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as c:
+        assert github.fetch_file_content("o", "r", "a.py", c) == "small file"
+
+    assert not any("/git/blobs/" in p for p in calls)
+
+
+def test_a_genuinely_empty_file_is_not_mistaken_for_an_oversized_one():
+    calls: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if "/contents/" in request.url.path:
+            return httpx.Response(200, json={"content": "", "encoding": "base64", "size": 0})
+        return httpx.Response(200, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as c:
+        assert github.fetch_file_content("o", "r", "empty.py", c) == ""
+
+    assert not any("/git/blobs/" in p for p in calls)

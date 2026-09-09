@@ -80,7 +80,22 @@ def fetch_file_content(
     )
     resp.raise_for_status()
     data = resp.json()
-    raw = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+
+    encoded = data.get("content") or ""
+
+    # The contents endpoint refuses to serve a file over 1MB: it answers 200
+    # with an empty body and encoding "none", so a naive decode yields an
+    # empty string and the file disappears without a word. The blobs
+    # endpoint serves the same object up to 100MB.
+    if data.get("encoding") == "none" or (not encoded and data.get("size", 0) > 0):
+        blob = client.get(
+            f"https://api.github.com/repos/{owner}/{repo}/git/blobs/{data['sha']}",
+            headers=gh_headers(),
+        )
+        blob.raise_for_status()
+        encoded = blob.json().get("content") or ""
+
+    raw = base64.b64decode(encoded).decode("utf-8", errors="replace")
     if max_chars is not None and len(raw) > max_chars:
         raw = (
             raw[:max_chars]
