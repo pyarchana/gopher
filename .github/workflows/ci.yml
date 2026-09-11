@@ -40,7 +40,10 @@ jobs:
         with:
           enable-cache: true
 
-      # Pinned: an unpinned ruff turns someone else's release into a
-      # failing build on a commit that changed nothing.
-      - run: uvx ruff@0.16.6 check .
-      - run: uvx ruff@0.16.6 format --check .
+      # Uses the pinned ruff from the dev dependencies rather than a
+      # separate version here, so the linter that runs in CI is the same
+      # one a contributor runs locally and there is one place to bump it.
+      - run: uv venv
+      - run: uv pip install -e ".[dev]"
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .

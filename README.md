@@ -104,8 +104,8 @@ if you prefer that route.
 
 ```bash
 uv run pytest
-uvx ruff check .
-uvx ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 CI runs all three on every push and pull request, against Python 3.11 through 3.14.

@@ -28,8 +28,8 @@ uv run --no-sync pytest
 ## Linting
 
 ```bash
-uvx ruff check .
-uvx ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 CI runs the tests on Python 3.11 through 3.14 and checks lint and formatting,
