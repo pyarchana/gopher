@@ -4,8 +4,15 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from gopher.cache.store import (
+    ContextKeyConflict,
+    get_nested,
+    read_context_raw,
+    set_nested,
+    write_context,
+)
 from gopher.config import DIGEST_LOG, ensure_data_dir
-from gopher.digest.ollama import build_extract_prompt, call_ollama
+from gopher.digest.ollama import build_extract_prompt, call_ollama, parse_facts
 
 
 def append_log(entry: str) -> None:
@@ -15,63 +22,80 @@ def append_log(entry: str) -> None:
         f.write(f"\n## {timestamp}\n\n{entry}\n")
 
 
-def digest_transcript(transcript_path: str, gophercache_context_path: str) -> str:
-    """Read a transcript file, extract structured facts via Ollama, and merge them into GopherCache context.json."""
+def _extract(transcript_path: str) -> dict[str, str]:
+    """Read a transcript and pull facts out of it, writing nothing."""
     transcript_file = Path(transcript_path)
     if not transcript_file.exists():
         raise FileNotFoundError(f"Transcript not found: {transcript_path}")
 
     transcript = transcript_file.read_text(encoding="utf-8")
-    prompt = build_extract_prompt(transcript)
-    raw = call_ollama(prompt)
+    return parse_facts(call_ollama(build_extract_prompt(transcript)))
 
-    # Strip any accidental markdown fences the model may have included
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        cleaned = "\n".join(line for line in lines if not line.startswith("```")).strip()
 
-    try:
-        new_facts: dict = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Ollama did not return valid JSON. Raw response:\n{raw}") from exc
+def digest_transcript(transcript_path: str) -> str:
+    """Read a transcript, extract facts with the local model, and merge them
+    into the context store.
 
-    context_file = Path(gophercache_context_path)
-    if context_file.exists():
-        existing: dict = json.loads(context_file.read_text(encoding="utf-8"))
-    else:
-        existing = {}
+    The destination is not a parameter. It is always the configured store,
+    so this tool cannot be pointed at an arbitrary file.
 
-    existing.update(new_facts)
-    context_file.parent.mkdir(parents=True, exist_ok=True)
-    context_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    A fact that would overwrite an existing value is applied and recorded
+    with what it replaced. A fact that would destroy a section is refused
+    and reported, without stopping the rest of the batch.
+    """
+    facts = _extract(transcript_path)
 
-    keys_added = list(new_facts.keys())
-    log_entry = (
-        f"**Transcript:** `{transcript_path}`  \n"
-        f"**Context written to:** `{gophercache_context_path}`  \n"
-        f"**Keys merged:** {keys_added}"
-    )
-    append_log(log_entry)
+    context = read_context_raw()
+    added: list[str] = []
+    overwritten: list[dict] = []
+    refused: list[dict] = []
+
+    for key, value in facts.items():
+        keys = key.split(".")
+        previous = get_nested(context, keys)
+        try:
+            set_nested(context, keys, value)
+        except ContextKeyConflict as exc:
+            refused.append({"key": key, "reason": str(exc)})
+            continue
+        if previous is None:
+            added.append(key)
+        elif previous != value:
+            overwritten.append({"key": key, "was": previous, "now": value})
+
+    write_context(context)
+
+    lines = [
+        f"**Transcript:** `{transcript_path}`  ",
+        f"**Added:** {added or 'none'}  ",
+    ]
+    if overwritten:
+        lines.append("**Replaced:**  ")
+        lines += [f"- `{o['key']}`: {o['was']!r} -> {o['now']!r}  " for o in overwritten]
+    if refused:
+        lines.append("**Refused:**  ")
+        lines += [f"- `{r['key']}`: {r['reason']}  " for r in refused]
+    append_log("\n".join(lines))
 
     return json.dumps(
         {
             "status": "ok",
-            "keys_merged": keys_added,
-            "context_path": str(context_file),
-        }
+            "added": added,
+            "overwritten": overwritten,
+            "refused": refused,
+        },
+        indent=2,
+        ensure_ascii=False,
     )
 
 
 def summarize_only(transcript_path: str) -> str:
-    """Read a transcript and return extracted facts as JSON text without writing anywhere."""
-    transcript_file = Path(transcript_path)
-    if not transcript_file.exists():
-        raise FileNotFoundError(f"Transcript not found: {transcript_path}")
+    """Extract facts from a transcript and return them without writing.
 
-    transcript = transcript_file.read_text(encoding="utf-8")
-    prompt = build_extract_prompt(transcript)
-    return call_ollama(prompt)
+    Runs the same validation the write path does, so what this shows is
+    what a digest would actually store.
+    """
+    return json.dumps(_extract(transcript_path), indent=2, ensure_ascii=False)
 
 
 def read_digest_log() -> str:

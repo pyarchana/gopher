@@ -24,8 +24,8 @@ Everything runs locally over stdio. Nothing leaves your machine except GitHub AP
 | `delete_context_key(key)` | Delete a key by dot path |
 | `log_diary(entry, tag?)` | Append a timestamped Markdown entry |
 | `read_diary(last_n?)` | Read back the last N diary entries |
-| `digest_transcript(transcript_path, context_path)` | Extract facts from a transcript, merge into the context store |
-| `summarize_only(transcript_path)` | Same extraction, returns JSON without writing anything |
+| `digest_transcript(transcript_path)` | Extract facts from a transcript, merge into the context store |
+| `summarize_only(transcript_path)` | Same extraction and validation, returns JSON without writing anything |
 | `read_digest_log()` | Full contents of the digest log |
 
 ---

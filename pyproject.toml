@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff==0.16.6"]
 
 [project.urls]
 Homepage = "https://github.com/pyarchana/gopher"

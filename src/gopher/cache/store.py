@@ -123,6 +123,19 @@ def set_nested(obj: dict, keys: list[str], value: str) -> None:
     obj[last] = value
 
 
+def get_nested(obj: dict, keys: list[str]):
+    """Return whatever sits at the dot path, or None if nothing does.
+
+    A section comes back as the dict itself, so callers can tell a value
+    apart from a subtree.
+    """
+    for key in keys:
+        if not isinstance(obj, dict) or key not in obj:
+            return None
+        obj = obj[key]
+    return obj
+
+
 def del_nested(obj: dict, keys: list[str]) -> bool:
     for key in keys[:-1]:
         if not isinstance(obj, dict) or key not in obj:
