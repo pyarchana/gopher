@@ -19,7 +19,8 @@ Everything runs locally over stdio. Nothing leaves your machine except GitHub AP
 | Tool | What it does |
 |---|---|
 | `fetch_github_repo(repo_url)` | Markdown digest of a public repo, tree plus top files |
-| `read_context()` | Return the whole context store as JSON |
+| `search_context(query, limit?)` | Find facts whose key or value contains `query` |
+| `read_context(prefix?)` | Return the whole store, or just one section |
 | `update_context(key, value)` | Set a value at a dot path, e.g. `projects.gopher.status` |
 | `delete_context_key(key)` | Delete a key by dot path |
 | `log_diary(entry, tag?)` | Append a timestamped Markdown entry |
@@ -27,6 +28,25 @@ Everything runs locally over stdio. Nothing leaves your machine except GitHub AP
 | `digest_transcript(transcript_path)` | Extract facts from a transcript, merge into the context store |
 | `summarize_only(transcript_path)` | Same extraction and validation, returns JSON without writing anything |
 | `read_digest_log()` | Full contents of the digest log |
+
+### Reading memory back
+
+Three ways in, in order of how much they cost you:
+
+```
+search_context("deadline")        # you know what, not where
+read_context("projects.gopher")   # you know where
+read_context()                    # everything, for when the store is small
+```
+
+`search_context` is a case-insensitive substring match over key paths and
+values. Hits on the key rank above hits on the value, results are capped at
+`limit` (20 by default), and the reply says how many matched in total so you
+can tell when you are seeing a slice.
+
+No embeddings, no index, no extra dependency. On a store of a few hundred
+facts substring matching is enough, and something cleverer can wait for
+evidence that it is not.
 
 ---
 

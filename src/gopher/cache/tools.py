@@ -6,18 +6,49 @@ from datetime import datetime
 from gopher.cache.store import (
     append_diary,
     del_nested,
+    get_nested,
     read_context_raw,
     read_diary_raw,
+    search,
     set_nested,
     split_entries,
     write_context,
 )
 
 
-def read_context() -> str:
-    """Read and return the full context store as a JSON string."""
+def read_context(prefix: str = "") -> str:
+    """Read the context store as JSON.
+
+    With no argument this returns everything, which is fine while the store
+    is small and wasteful once it is not. Pass a dot path to read one
+    section, or use search_context when you know what you are looking for
+    but not where it lives."""
     data = read_context_raw()
+    if prefix:
+        node = get_nested(data, prefix.split("."))
+        if node is None:
+            return f"Nothing stored at {prefix!r}"
+        data = node if isinstance(node, dict) else {prefix: node}
     return json.dumps(data, indent=2, ensure_ascii=False)
+
+
+def search_context(query: str, limit: int = 20) -> str:
+    """Find stored facts whose key path or value contains *query*.
+
+    Case-insensitive substring match. Matches on the key come before
+    matches on the value. Returns at most *limit* hits and says how many
+    there were in total, so you know when you are seeing a slice."""
+    hits, total = search(read_context_raw(), query, limit)
+    return json.dumps(
+        {
+            "query": query,
+            "matches": hits,
+            "shown": len(hits),
+            "total": total,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
 
 
 def update_context(key: str, value: str) -> str:
@@ -68,6 +99,7 @@ def read_diary(last_n: int = 10) -> str:
 def register(mcp) -> None:
     """Attach this module's tools to the shared FastMCP instance."""
     mcp.tool()(read_context)
+    mcp.tool()(search_context)
     mcp.tool()(update_context)
     mcp.tool()(delete_context_key)
     mcp.tool()(log_diary)

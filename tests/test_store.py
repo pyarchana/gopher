@@ -242,6 +242,128 @@ def test_read_diary_zero_returns_nothing(diary):
     assert "secret" not in tools.read_diary(0)
 
 
+# retrieval (#9)
+
+
+SAMPLE = {
+    "projects": {
+        "gopher": {"status": "active", "language": "Python"},
+        "precedent": {"status": "submitted", "note": "agentic memory hackathon"},
+    },
+    "deadline": "2026-09-30",
+    "editor": "vscode",
+}
+
+
+def test_flatten_turns_sections_into_dot_paths():
+    got = dict(store.flatten(SAMPLE))
+    assert got["projects.gopher.status"] == "active"
+    assert got["deadline"] == "2026-09-30"
+    assert "projects" not in got
+
+
+def test_flatten_of_an_empty_store_is_empty():
+    assert store.flatten({}) == []
+
+
+def test_search_matches_a_key_path():
+    hits, total = store.search(SAMPLE, "precedent", limit=20)
+    assert total == 2
+    assert all("precedent" in h["key"] for h in hits)
+
+
+def test_search_matches_a_value():
+    hits, _ = store.search(SAMPLE, "hackathon", limit=20)
+    assert hits[0]["key"] == "projects.precedent.note"
+    assert hits[0]["matched"] == "value"
+
+
+def test_search_is_case_insensitive():
+    assert store.search(SAMPLE, "PYTHON", limit=20)[1] == 1
+
+
+def test_key_matches_come_before_value_matches():
+    """A key hit is a stronger signal than a value that mentions the word."""
+    data = {"vscode": "the editor", "editor": "vscode"}
+    hits, _ = store.search(data, "vscode", limit=20)
+    assert hits[0]["matched"] == "key"
+    assert hits[1]["matched"] == "value"
+
+
+def test_search_bounds_results_but_reports_the_real_total():
+    data = {f"key{i}": "match me" for i in range(50)}
+    hits, total = store.search(data, "match", limit=5)
+    assert len(hits) == 5
+    assert total == 50
+
+
+def test_search_for_nothing_finds_nothing():
+    assert store.search(SAMPLE, "   ", limit=20) == ([], 0)
+
+
+def test_a_query_with_no_matches_returns_empty():
+    assert store.search(SAMPLE, "kubernetes", limit=20) == ([], 0)
+
+
+def test_a_long_value_is_trimmed_in_results():
+    """The whole point of this tool is not returning more than fits."""
+    data = {"essay": "x" * 5_000}
+    hits, _ = store.search(data, "essay", limit=20)
+    assert len(hits[0]["value"]) < 700
+    assert "5,000 chars total" in hits[0]["value"]
+
+
+# scoped reads
+
+
+def test_read_context_with_no_argument_returns_everything(ctx):
+    """Backward compatible: this is in the README and in people's habits."""
+    store.write_context(SAMPLE)
+    assert json.loads(tools.read_context()) == SAMPLE
+
+
+def test_read_context_scopes_to_a_section(ctx):
+    store.write_context(SAMPLE)
+    got = json.loads(tools.read_context("projects.gopher"))
+    assert got == {"status": "active", "language": "Python"}
+
+
+def test_read_context_of_a_single_value(ctx):
+    store.write_context(SAMPLE)
+    assert json.loads(tools.read_context("deadline")) == {"deadline": "2026-09-30"}
+
+
+def test_read_context_of_a_missing_prefix_says_so(ctx):
+    store.write_context(SAMPLE)
+    assert "Nothing stored at" in tools.read_context("projects.nonexistent")
+
+
+# the tool wrapper
+
+
+def test_search_context_tool_reports_what_it_showed(ctx):
+    store.write_context({f"key{i}": "match me" for i in range(50)})
+    got = json.loads(tools.search_context("match", limit=5))
+
+    assert got["query"] == "match"
+    assert got["shown"] == 5
+    assert got["total"] == 50
+    assert len(got["matches"]) == 5
+
+
+def test_search_context_beats_reading_the_whole_store(ctx):
+    """The reason this phase exists."""
+    store.write_context(
+        {f"unrelated{i}": "noise " * 20 for i in range(200)} | {"deadline": "friday"}
+    )
+
+    whole = tools.read_context()
+    found = tools.search_context("deadline")
+
+    assert "friday" in found
+    assert len(found) < len(whole) / 10
+
+
 def test_text_before_the_first_header_is_not_an_entry(diary):
     diary.write_text("hand written preamble\n", encoding="utf-8")
     tools.log_diary("real entry")

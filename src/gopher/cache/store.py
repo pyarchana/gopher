@@ -123,6 +123,67 @@ def set_nested(obj: dict, keys: list[str], value: str) -> None:
     obj[last] = value
 
 
+#: Longest value a single search hit will show. The store is meant to hold
+#: short facts, but nothing stops a digest writing a long one, and a search
+#: result that returns more than the caller can accept is the failure this
+#: whole tool exists to avoid.
+MAX_HIT_CHARS = 500
+
+
+def flatten(obj: dict, prefix: str = "") -> list[tuple[str, str]]:
+    """Every leaf in the store as (dot path, value) pairs.
+
+    Sections disappear; only the values under them come back, addressed by
+    the same dot paths update_context and delete_context_key accept.
+    """
+    out: list[tuple[str, str]] = []
+    for key, value in obj.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            out.extend(flatten(value, path))
+        else:
+            out.append((path, str(value)))
+    return out
+
+
+def search(data: dict, query: str, limit: int) -> tuple[list[dict], int]:
+    """Case-insensitive substring search over key paths and values.
+
+    Returns the hits to show and how many there were in total, so a caller
+    can say what it left out.
+
+    Substring rather than embeddings on purpose. It needs no model, no
+    index and no extra dependency, and on a store of a few hundred facts it
+    is enough. Reach for something cleverer when there is evidence this is
+    the limitation, not before.
+    """
+    needle = query.strip().lower()
+    if not needle:
+        return [], 0
+
+    hits: list[dict] = []
+    for path, value in flatten(data):
+        in_key = needle in path.lower()
+        in_value = needle in value.lower()
+        if not (in_key or in_value):
+            continue
+        shown = value
+        if len(shown) > MAX_HIT_CHARS:
+            shown = shown[:MAX_HIT_CHARS] + f"... [{len(value):,} chars total]"
+        hits.append(
+            {
+                "key": path,
+                "value": shown,
+                "matched": "key" if in_key else "value",
+            }
+        )
+
+    # A key match is a stronger signal than a value that happens to mention
+    # the word, so those come first.
+    hits.sort(key=lambda h: (h["matched"] != "key", h["key"]))
+    return hits[:limit], len(hits)
+
+
 def get_nested(obj: dict, keys: list[str]):
     """Return whatever sits at the dot path, or None if nothing does.
 
