@@ -133,6 +133,12 @@ CI runs all three on every push and pull request, against Python 3.11 through 3.
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
