@@ -1,0 +1,35 @@
+#!/bin/sh
+# Runs what CI runs, before the commit rather than after the push.
+#
+# Enable it once per clone:
+#   git config core.hooksPath .githooks
+#
+# Skip it for a single commit with:
+#   git commit --no-verify
+#
+# --no-sync throughout, because a Claude client holding the MCP server open
+# locks .venv/Scripts/gopher.exe on Windows and uv cannot reinstall over it.
+
+set -e
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "pre-commit: uv not found on PATH, skipping checks" >&2
+  exit 0
+fi
+
+fail() {
+  echo >&2
+  echo "pre-commit: $1" >&2
+  echo "  fix:  $2" >&2
+  echo "  skip: git commit --no-verify" >&2
+  exit 1
+}
+
+uv run --no-sync ruff check . >/dev/null 2>&1 \
+  || fail "ruff found lint errors" "uv run ruff check . --fix"
+
+uv run --no-sync ruff format --check . >/dev/null 2>&1 \
+  || fail "files are not formatted" "uv run ruff format ."
+
+uv run --no-sync pytest -q >/dev/null 2>&1 \
+  || fail "tests are failing" "uv run --no-sync pytest"

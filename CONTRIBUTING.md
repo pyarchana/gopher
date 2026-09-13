@@ -25,6 +25,18 @@ cannot reinstall over it. Skip the reinstall:
 uv run --no-sync pytest
 ```
 
+## Pre-commit hook
+
+Optional, and worth it. Runs the same three checks CI runs, before the commit
+instead of after the push. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+It refuses the commit and names the fix if anything fails. `git commit
+--no-verify` skips it for one commit.
+
 ## Linting
 
 ```bash
