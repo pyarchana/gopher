@@ -12,8 +12,10 @@ updates:
     open-pull-requests-limit: 3
     groups:
       python:
+        # No update-types filter. Filtering to minor and patch looked tidy and
+        # did the opposite: major bumps fell out of the group and each got a
+        # pull request of its own, so five dependencies produced four PRs.
         patterns: ["*"]
-        update-types: [minor, patch]
     commit-message:
       prefix: ""
 
