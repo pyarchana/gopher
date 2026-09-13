@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gopher — fetch, cache and digest context for Claude</title>
+<meta name="description" content="One MCP server that digests any GitHub repo, keeps memory across conversations, and extracts facts locally with Ollama.">
+<style>
+  :root {
+    /* The page commits to a light design, so say so rather than letting a
+       browser in dark mode invert the controls and scrollbars around it. */
+    color-scheme: light;
+    --ink: #16161a;
+    --mute: #5f5f6b;
+    --faint: #8a8a96;
+    --rule: #e3e3e8;
+    --paper: #ffffff;
+    --wash: #f7f7f9;
+    --accent: #1a5fb4;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.65 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(26,95,180,.28); }
+  a:hover { border-bottom-color: var(--accent); }
+
+  code, pre, .mono { font-family: var(--mono); }
+  code { font-size: .88em; background: var(--wash); padding: .12em .35em; border-radius: 3px; }
+  pre {
+    font-size: 13px; line-height: 1.6; background: var(--wash);
+    border: 1px solid var(--rule); border-radius: 6px;
+    padding: 16px 18px; overflow-x: auto; margin: 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* section labels */
+  .label {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+    color: var(--faint); text-transform: uppercase; margin: 0 0 8px;
+  }
+  .label a { color: inherit; border: 0; }
+
+  section { padding: 56px 0; border-top: 1px solid var(--rule); }
+  section h2 { font-size: 26px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  section > .wrap > p { color: var(--mute); max-width: 62ch; }
+
+  /* hero */
+  header { padding: 72px 0 56px; }
+  header h1 { font-family: var(--mono); font-size: 34px; margin: 0 0 14px; letter-spacing: -.02em; }
+  header .tagline { font-size: 20px; line-height: 1.5; margin: 0 0 28px; max-width: 34ch; }
+  header .sub { color: var(--mute); max-width: 60ch; margin: 0 0 28px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cta pre { flex: 1 1 320px; }
+  .cta a.button {
+    border: 1px solid var(--ink); border-radius: 6px; padding: 10px 18px;
+    color: var(--ink); font-size: 14px; white-space: nowrap;
+  }
+  .cta a.button:hover { background: var(--ink); color: var(--paper); }
+
+  /* three-up */
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 8px; }
+  .three h3 { font-family: var(--mono); font-size: 15px; margin: 0 0 6px; }
+  .three p { color: var(--mute); font-size: 15px; margin: 0; }
+
+  /* before / after */
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+  .ba > div { min-width: 0; }
+  .ba h3 {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); margin: 0 0 8px;
+  }
+  .ba .num { font-family: var(--mono); font-size: 22px; margin: 10px 0 0; }
+  .ba .num small { color: var(--faint); font-size: 12px; font-weight: 400; display: block; margin-top: 2px; letter-spacing: .04em; text-transform: uppercase; }
+  .bad { color: #a51d2d; }
+  .good { color: #1a7f37; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 20px; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 400; }
+  td:first-child { white-space: nowrap; }
+  td code { font-size: .85em; }
+  .num-col { text-align: right; font-family: var(--mono); white-space: nowrap; }
+
+  .steps { counter-reset: step; padding: 0; list-style: none; margin: 24px 0 0; }
+  .steps > li { counter-increment: step; margin: 0 0 28px; }
+  .steps > li > .n {
+    font-family: var(--mono); font-size: 12px; color: var(--faint);
+    display: block; margin-bottom: 6px;
+  }
+  .steps > li > .n::before { content: "0" counter(step) " "; }
+
+  footer { padding: 48px 0 64px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 14px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (max-width: 680px) {
+    .three, .ba { grid-template-columns: 1fr; }
+    header h1 { font-size: 28px; }
+    header .tagline { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>gopher</h1>
+    <p class="tagline">One MCP server that fetches, caches and digests context for Claude.</p>
+    <p class="sub">
+      Point it at a GitHub repository and get back a digest small enough to read.
+      Keep facts across conversations in two plain files you can open yourself.
+      Everything runs locally over stdio.
+    </p>
+    <div class="cta">
+<pre><code>claude mcp add gopher --scope user -- \
+  uv run --no-sync --project /path/to/gopher gopher</code></pre>
+      <a class="button" href="https://github.com/pyarchana/gopher">GitHub</a>
+    </div>
+  </div>
+</header>
+
+<section id="what">
+  <div class="wrap">
+    <p class="label"><a href="#what">[ WHAT IT DOES ]</a></p>
+    <h2>Three things, one install</h2>
+    <div class="three">
+      <div>
+        <h3>fetch</h3>
+        <p>A whole repository as markdown: directory tree plus the files that matter. Binaries, lock files and <code>node_modules</code> filtered out, the rest ranked.</p>
+      </div>
+      <div>
+        <h3>cache</h3>
+        <p>Memory that survives the conversation, stored as a structured <code>context.json</code> and an append-only <code>diary.md</code>. Both readable without this tool.</p>
+      </div>
+      <div>
+        <h3>digest</h3>
+        <p>Reads a transcript, pulls the facts out with a local Ollama model, and merges them into the cache. Nothing leaves the machine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="digest">
+  <div class="wrap">
+    <p class="label"><a href="#digest">[ THE DIGEST ]</a></p>
+    <h2>Most of a repository is not worth sending</h2>
+    <p>
+      Early versions returned a fixed ten files, which is not a size limit at all: ten files is
+      anywhere from four thousand characters to two hundred thousand. Anything past the client's
+      ceiling was rejected whole, so the caller got nothing rather than something trimmed.
+    </p>
+
+    <div class="ba">
+      <div>
+        <h3>Before</h3>
+        <pre><code>27,194  test/ecosystem/airflow/pyproject.toml
+32,048  test/ecosystem/home-assistant/...
+27,517  test/ecosystem/pandas/pyproject.toml
+ 9,156  test/ecosystem/jupyterlab/...
+ 8,757  test/ecosystem/black/pyproject.toml</code></pre>
+        <p class="num bad">228,310<small>characters, mostly the wrong files</small></p>
+      </div>
+      <div>
+        <h3>After</h3>
+        <pre><code>Cargo.toml
+README.md
+pyproject.toml
+Dockerfile
+crates/uv-build/src/main.rs</code></pre>
+        <p class="num good">39,168<small>characters, within budget</small></p>
+      </div>
+    </div>
+
+    <p style="margin-top:28px">
+      There is a total character budget now, spent on the tree first and then files in priority
+      order until it runs out. Ranking accounts for where a file sits, not just what it is called,
+      so a root manifest beats a vendored copy of the same filename buried in a test fixture.
+    </p>
+
+    <table>
+      <tr><th>Repository</th><th class="num-col">Before</th><th class="num-col">After</th></tr>
+      <tr><td>astral-sh/uv</td><td class="num-col">207,867</td><td class="num-col">39,321</td></tr>
+      <tr><td>modelcontextprotocol/python-sdk</td><td class="num-col">217,488</td><td class="num-col">39,224</td></tr>
+      <tr><td>punkpeye/awesome-mcp-servers</td><td class="num-col">228,310</td><td class="num-col">39,168</td></tr>
+      <tr><td>sktime/sktime-mcp</td><td class="num-col">103,786</td><td class="num-col">39,231</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="memory">
+  <div class="wrap">
+    <p class="label"><a href="#memory">[ MEMORY ]</a></p>
+    <h2>Memory you can only read in full is a file</h2>
+    <p>
+      Facts accumulate across conversations. Reading them back used to mean returning the entire
+      store every time, which works until it does not. Search over key paths and values, or read
+      one section by its dot path.
+    </p>
+
+    <div class="ba">
+      <div>
+        <h3>Reading the whole store</h3>
+        <pre><code>read_context()</code></pre>
+        <p class="num bad">13,484<small>characters returned</small></p>
+      </div>
+      <div>
+        <h3>Finding one fact</h3>
+        <pre><code>search_context("memory")</code></pre>
+        <p class="num good">202<small>characters returned</small></p>
+      </div>
+    </div>
+
+<pre style="margin-top:24px"><code>{
+  "query": "memory",
+  "matches": [
+    {
+      "key": "projects.precedent.note",
+      "value": "agentic memory hackathon, submitted",
+      "matched": "value"
+    }
+  ],
+  "shown": 1,
+  "total": 1
+}</code></pre>
+
+    <p style="margin-top:20px">
+      Substring matching over keys and values, no embeddings and no index. On a store of a few
+      hundred facts that is enough, and something cleverer can wait for evidence that it is not.
+    </p>
+  </div>
+</section>
+
+<section id="quick-start">
+  <div class="wrap">
+    <p class="label"><a href="#quick-start">[ QUICK START ]</a></p>
+    <h2>Running it</h2>
+
+    <ol class="steps">
+      <li>
+        <span class="n">Clone and install</span>
+<pre><code>git clone https://github.com/pyarchana/gopher.git
+cd gopher
+uv venv
+uv pip install -e ".[dev]"</code></pre>
+      </li>
+      <li>
+        <span class="n">Optional: a GitHub token, for a higher rate limit</span>
+<pre><code>cp .env.example .env
+# add GITHUB_TOKEN=... to that file</code></pre>
+      </li>
+      <li>
+        <span class="n">Register it with Claude Code</span>
+<pre><code>claude mcp add gopher --scope user -- \
+  uv run --no-sync --project /absolute/path/to/gopher gopher</code></pre>
+      </li>
+      <li>
+        <span class="n">Or with Claude Desktop, in claude_desktop_config.json</span>
+<pre><code>{
+  "mcpServers": {
+    "gopher": {
+      "command": "uv",
+      "args": ["run", "--no-sync", "--project",
+               "/absolute/path/to/gopher", "gopher"]
+    }
+  }
+}</code></pre>
+      </li>
+    </ol>
+
+    <p style="margin-top:4px">
+      The digest tools additionally want <a href="https://ollama.com">Ollama</a> running locally with
+      <code>llama3.2</code> pulled. Fetch and cache work without it.
+    </p>
+  </div>
+</section>
+
+<section id="tools">
+  <div class="wrap">
+    <p class="label"><a href="#tools">[ TOOLS ]</a></p>
+    <h2>Ten tools</h2>
+    <table>
+      <tr><th>Tool</th><th>What it does</th></tr>
+      <tr><td><code>fetch_github_repo(repo_url)</code></td><td>Markdown digest of a public repo, tree plus top files</td></tr>
+      <tr><td><code>search_context(query, limit)</code></td><td>Find facts whose key or value contains the query</td></tr>
+      <tr><td><code>read_context(prefix)</code></td><td>The whole store, or just one section</td></tr>
+      <tr><td><code>update_context(key, value)</code></td><td>Set a value at a dot path</td></tr>
+      <tr><td><code>delete_context_key(key)</code></td><td>Delete a key by dot path</td></tr>
+      <tr><td><code>log_diary(entry, tag)</code></td><td>Append a timestamped markdown entry</td></tr>
+      <tr><td><code>read_diary(last_n)</code></td><td>Read back the last N entries</td></tr>
+      <tr><td><code>digest_transcript(transcript_path)</code></td><td>Extract facts from a transcript, merge into the store</td></tr>
+      <tr><td><code>summarize_only(transcript_path)</code></td><td>Same extraction, returns JSON without writing</td></tr>
+      <tr><td><code>read_digest_log()</code></td><td>Full contents of the digest log</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="config">
+  <div class="wrap">
+    <p class="label"><a href="#config">[ CONFIGURATION ]</a></p>
+    <h2>Four environment variables</h2>
+    <p>Read from a <code>.env</code> file in the project root, which the server loads on startup.</p>
+    <table>
+      <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
+      <tr><td><code>GITHUB_TOKEN</code></td><td class="mono">none</td><td>Raises the GitHub rate limit from 60 to 5,000 an hour</td></tr>
+      <tr><td><code>GOPHER_DATA_DIR</code></td><td class="mono">./data</td><td>Where the store, diary and digest log live</td></tr>
+      <tr><td><code>GOPHER_DIGEST_BUDGET</code></td><td class="mono">40000</td><td>Maximum characters one repo digest may return</td></tr>
+      <tr><td><code>GOPHER_OLLAMA_MODEL</code></td><td class="mono">llama3.2</td><td>Model used for fact extraction</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>MIT. Source at <a href="https://github.com/pyarchana/gopher">github.com/pyarchana/gopher</a>.</p>
+    <p>Built by <a href="https://github.com/pyarchana">Archana</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>
