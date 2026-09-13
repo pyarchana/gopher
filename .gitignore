@@ -13,7 +13,7 @@ env/
 # Environment
 .env
 
-# Data — keep the directory, ignore its contents
+# Data, keep the directory and ignore its contents
 data/*
 !data/.gitkeep
 

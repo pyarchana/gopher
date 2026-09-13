@@ -4,6 +4,8 @@
 
 One MCP server that fetches, caches, and digests context for Claude.
 
+**[pyarchana.github.io/gopher](https://pyarchana.github.io/gopher/)**
+
 Gopher is three things that used to be three separate servers:
 
 - **fetch**: point it at a GitHub repo and get back a clean Markdown digest: full directory tree, plus the contents of the files that actually matter. Filters out binaries, lock files, `node_modules`, `venv`, and the rest of the noise, then ranks what's left. No README? It builds one for you.
@@ -20,14 +22,13 @@ Everything runs locally over stdio. Nothing leaves your machine except GitHub AP
 |---|---|
 | `fetch_github_repo(repo_url)` | Markdown digest of a public repo, tree plus top files |
 | `search_context(query, limit?)` | Find facts whose key or value contains `query` |
-| `read_context(prefix?)` | Return the whole store, or just one section |
 | `update_context(key, value)` | Set a value at a dot path, e.g. `projects.gopher.status` |
-| `delete_context_key(key)` | Delete a key by dot path |
 | `log_diary(entry, tag?)` | Append a timestamped Markdown entry |
-| `read_diary(last_n?)` | Read back the last N diary entries |
-| `digest_transcript(transcript_path)` | Extract facts from a transcript, merge into the context store |
-| `summarize_only(transcript_path)` | Same extraction and validation, returns JSON without writing anything |
-| `read_digest_log()` | Full contents of the digest log |
+| `digest_transcript(transcript_path)` | Extract facts from a transcript, merge into the store |
+
+Five more cover reading, deleting and previewing. The full reference lives on
+[the site](https://pyarchana.github.io/gopher/#tools), which is checked against the
+server by `tests/test_docs.py` so the two cannot drift apart.
 
 ### Reading memory back
 
@@ -80,7 +81,7 @@ Add this to `claude_desktop_config.json` (`%APPDATA%\Claude\` on Windows, `~/Lib
   "mcpServers": {
     "gopher": {
       "command": "uv",
-      "args": ["run", "--project", "/absolute/path/to/gopher", "gopher"]
+      "args": ["run", "--no-sync", "--project", "/absolute/path/to/gopher", "gopher"]
     }
   }
 }
@@ -91,7 +92,7 @@ Restart Claude Desktop afterwards.
 For Claude Code, register it once and it is available in every session:
 
 ```bash
-claude mcp add gopher --scope user -- uv run --project /absolute/path/to/gopher gopher
+claude mcp add gopher --scope user -- uv run --no-sync --project /absolute/path/to/gopher gopher
 ```
 
 ---

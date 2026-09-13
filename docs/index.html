@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gopher — fetch, cache and digest context for Claude</title>
+<title>gopher: fetch, cache and digest context for Claude</title>
 <meta name="description" content="One MCP server that digests any GitHub repo, keeps memory across conversations, and extracts facts locally with Ollama.">
 <style>
   :root {
@@ -103,6 +103,21 @@
 
   footer { padding: 48px 0 64px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 14px; }
   footer p { margin: 0 0 6px; }
+
+  /* Copy buttons are added by script. Everything here is scoped to .copyable
+     so that with scripts off the page looks exactly as it did before. */
+  .copyable { position: relative; }
+  .copyable > button {
+    position: absolute; top: 8px; right: 8px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 3px 8px;
+    cursor: pointer; opacity: 0; transition: opacity .12s;
+  }
+  .copyable:hover > button,
+  .copyable > button:focus-visible { opacity: 1; }
+  .copyable > button:hover { color: var(--ink); border-color: var(--faint); }
+  .copyable > button[data-done] { color: #1a7f37; border-color: #1a7f37; opacity: 1; }
 
   @media (max-width: 680px) {
     .three, .ba { grid-template-columns: 1fr; }
@@ -326,6 +341,34 @@ uv pip install -e ".[dev]"</code></pre>
     <p>Built by <a href="https://github.com/pyarchana">Archana</a>.</p>
   </div>
 </footer>
+
+<script>
+// Progressive enhancement only. Every block below is already selectable
+// text, so with scripts off the page loses a convenience and nothing else.
+document.querySelectorAll('pre').forEach(function (pre) {
+  var wrap = document.createElement('div');
+  wrap.className = 'copyable';
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+
+  var button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'copy';
+  button.setAttribute('aria-label', 'Copy to clipboard');
+  wrap.appendChild(button);
+
+  button.addEventListener('click', function () {
+    navigator.clipboard.writeText(pre.innerText.trim()).then(function () {
+      button.textContent = 'copied';
+      button.setAttribute('data-done', '');
+      setTimeout(function () {
+        button.textContent = 'copy';
+        button.removeAttribute('data-done');
+      }, 1400);
+    });
+  });
+});
+</script>
 
 </body>
 </html>
