@@ -1,6 +1,5 @@
 """GitHub REST API access and directory-tree rendering."""
 
-import base64
 import os
 import re
 from pathlib import PurePosixPath
@@ -28,9 +27,9 @@ def parse_repo_url(url: str) -> tuple[str, str]:
     return m.group(1), m.group(2).removesuffix(".git")
 
 
-def gh_headers() -> dict:
+def gh_headers(accept: str = "application/vnd.github+json") -> dict:
     token = os.environ.get("GITHUB_TOKEN")
-    h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    h = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h
@@ -66,36 +65,45 @@ def fetch_tree(owner: str, repo: str, client: httpx.Client) -> RepoTree:
     )
 
 
+class EmptyContent(RuntimeError):
+    """GitHub returned no bytes for a file the tree says is not empty."""
+
+
 def fetch_file_content(
-    owner: str, repo: str, path: str, client: httpx.Client, max_chars: int | None = None
+    owner: str,
+    repo: str,
+    path: str,
+    client: httpx.Client,
+    max_chars: int | None = None,
+    expected_size: int | None = None,
 ) -> str:
     """Fetch one file, optionally trimmed to *max_chars*.
+
+    Asks for the raw media type, which returns the file body directly in
+    one request for files up to 100MB. The JSON form refuses anything over
+    1MB with an empty body, and the blobs endpoint that works around that
+    costs a second request and answers in base64 about a third larger.
+
+    *expected_size* is the size the tree listing reported. When it is
+    non-zero and the body comes back empty, this raises rather than
+    returning "", because an empty string is exactly how a file used to
+    vanish from a digest without anyone being told.
 
     Sizing is the caller's decision because only the caller knows how much
     of the digest budget is left.
     """
     resp = client.get(
         f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
-        headers=gh_headers(),
+        headers=gh_headers(accept="application/vnd.github.raw"),
     )
     resp.raise_for_status()
-    data = resp.json()
 
-    encoded = data.get("content") or ""
-
-    # The contents endpoint refuses to serve a file over 1MB: it answers 200
-    # with an empty body and encoding "none", so a naive decode yields an
-    # empty string and the file disappears without a word. The blobs
-    # endpoint serves the same object up to 100MB.
-    if data.get("encoding") == "none" or (not encoded and data.get("size", 0) > 0):
-        blob = client.get(
-            f"https://api.github.com/repos/{owner}/{repo}/git/blobs/{data['sha']}",
-            headers=gh_headers(),
+    if not resp.content and expected_size:
+        raise EmptyContent(
+            f"{path} is {expected_size:,} bytes in the tree but GitHub returned no content"
         )
-        blob.raise_for_status()
-        encoded = blob.json().get("content") or ""
 
-    raw = base64.b64decode(encoded).decode("utf-8", errors="replace")
+    raw = resp.content.decode("utf-8", errors="replace")
     if max_chars is not None and len(raw) > max_chars:
         raw = (
             raw[:max_chars]

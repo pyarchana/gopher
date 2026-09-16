@@ -1,21 +1,29 @@
-import base64
-
 import httpx
+import pytest
 
 from gopher.fetch import github, tools
 
 
 def _handler(tree_payload, meta=None, file_text="hello"):
-    """Route the three GitHub endpoints the fetch path uses."""
+    """Route the three GitHub endpoints the fetch path uses.
+
+    /contents/ answers with the raw file body, as GitHub does when asked for
+    application/vnd.github.raw. It used to answer with the JSON form, and
+    after the switch to raw every digest test kept passing while reading
+    that JSON as if it were the file.
+    """
     meta = meta or {"default_branch": "main", "stargazers_count": 3, "language": "Python"}
-    encoded = base64.b64encode(file_text.encode()).decode()
 
     def handle(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if "/git/trees/" in path:
             return httpx.Response(200, json=tree_payload)
         if "/contents/" in path:
-            return httpx.Response(200, json={"content": encoded})
+            return httpx.Response(
+                200,
+                content=file_text.encode(),
+                headers={"content-type": "application/vnd.github.raw; charset=utf-8"},
+            )
         return httpx.Response(200, json=meta)
 
     return handle
@@ -179,7 +187,7 @@ def test_one_huge_file_cannot_crowd_out_the_rest():
 
 def test_files_below_the_floor_are_skipped():
     payload = {"tree": _blobs("main.py", "README.md")}
-    with _client(payload, file_text="") as c:
+    with _client(payload, file_text="tiny") as c:
         out = tools.build_digest("https://github.com/o/r", c, budget=40_000)
 
     assert "0 of 2 shown" in out
@@ -190,92 +198,83 @@ def test_the_file_count_is_no_longer_fixed_at_ten():
     assert out.count("### `") > 10
 
 
-# files the contents endpoint will not serve (#15)
+# file content (#15, #21)
 
 
-def _oversized_handler(blob_text, calls):
-    """Mimic GitHub refusing a file over 1MB, then serving it as a blob."""
-
+def _raw_handler(body: bytes, calls: list):
     def handle(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        calls.append(path)
-        if "/git/blobs/" in path:
-            return httpx.Response(
-                200,
-                json={
-                    "content": base64.b64encode(blob_text.encode()).decode(),
-                    "encoding": "base64",
-                },
-            )
-        if "/contents/" in path:
-            # what GitHub actually returns: 200, empty body, encoding "none"
-            return httpx.Response(
-                200, json={"content": "", "encoding": "none", "size": 1_616_144, "sha": "abc123"}
-            )
-        return httpx.Response(200, json={"default_branch": "main"})
+        calls.append((request.url.path, request.headers.get("accept")))
+        return httpx.Response(200, content=body)
 
     return handle
 
 
-def test_a_file_too_large_for_contents_falls_back_to_blobs():
-    """The regression test for #15.
+def _fetch(body: bytes, **kw):
+    calls: list = []
+    with httpx.Client(transport=httpx.MockTransport(_raw_handler(body, calls))) as c:
+        return github.fetch_file_content("o", "r", "README.md", c, **kw), calls
 
-    punkpeye/awesome-mcp-servers has a 1,616,144 byte README. The contents
-    endpoint answered 200 with an empty body, the decode produced "", and
-    the highest-ranked file in that repo silently vanished.
+
+def test_file_content_is_one_raw_request():
+    """The regression test for #21.
+
+    The fix for #15 asked for JSON, got an empty body for anything over
+    1MB, then made a second request to the blobs endpoint and decoded base64
+    about a third larger than the file.
     """
-    calls: list[str] = []
-    with httpx.Client(
-        transport=httpx.MockTransport(_oversized_handler("real content", calls))
-    ) as c:
-        got = github.fetch_file_content("o", "r", "README.md", c)
+    got, calls = _fetch(b"# readme")
 
-    assert got == "real content"
-    assert any("/git/blobs/abc123" in p for p in calls)
+    assert got == "# readme"
+    assert len(calls) == 1
+    path, accept = calls[0]
+    assert accept == "application/vnd.github.raw"
+    assert "/git/blobs/" not in path
 
 
-def test_the_fallback_still_respects_the_cap():
-    calls: list[str] = []
-    with httpx.Client(transport=httpx.MockTransport(_oversized_handler("z" * 5_000, calls))) as c:
-        got = github.fetch_file_content("o", "r", "README.md", c, max_chars=100)
+def test_a_file_over_one_megabyte_comes_back_whole():
+    """The regression test for #15, still: large files must not vanish."""
+    body = b"x" * 1_756_337
+    got, calls = _fetch(body, expected_size=len(body))
+
+    assert len(got) == len(body)
+    assert len(calls) == 1
+
+
+def test_raw_content_still_respects_the_cap():
+    got, _ = _fetch(b"z" * 5_000, max_chars=100)
 
     assert got.startswith("z" * 100)
     assert "trimmed, showing first 100 of 5,000 chars" in got
 
 
-def test_a_normal_file_does_not_touch_the_blobs_endpoint():
-    """The fallback is an extra API call, so it must not fire routinely."""
-    calls: list[str] = []
-
-    def handle(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        if "/contents/" in request.url.path:
-            return httpx.Response(
-                200,
-                json={
-                    "content": base64.b64encode(b"small file").decode(),
-                    "encoding": "base64",
-                    "size": 10,
-                },
-            )
-        return httpx.Response(200, json={})
-
-    with httpx.Client(transport=httpx.MockTransport(handle)) as c:
-        assert github.fetch_file_content("o", "r", "a.py", c) == "small file"
-
-    assert not any("/git/blobs/" in p for p in calls)
+def test_an_empty_body_for_a_non_empty_file_raises():
+    """An empty string is exactly how a file used to vanish without a word."""
+    with pytest.raises(github.EmptyContent, match="1,616,144 bytes"):
+        _fetch(b"", expected_size=1_616_144)
 
 
-def test_a_genuinely_empty_file_is_not_mistaken_for_an_oversized_one():
-    calls: list[str] = []
+def test_a_genuinely_empty_file_returns_empty():
+    got, _ = _fetch(b"", expected_size=0)
+    assert got == ""
 
-    def handle(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        if "/contents/" in request.url.path:
-            return httpx.Response(200, json={"content": "", "encoding": "base64", "size": 0})
-        return httpx.Response(200, json={})
 
-    with httpx.Client(transport=httpx.MockTransport(handle)) as c:
-        assert github.fetch_file_content("o", "r", "empty.py", c) == ""
+def test_an_empty_body_without_a_known_size_returns_empty():
+    """No tree size to compare against, so there is nothing to contradict."""
+    got, _ = _fetch(b"")
+    assert got == ""
 
-    assert not any("/git/blobs/" in p for p in calls)
+
+def test_bytes_that_are_not_utf8_do_not_crash_the_digest():
+    got, _ = _fetch(b"ok \xff\xfe still ok")
+    assert got.startswith("ok ")
+    assert got.endswith("still ok")
+
+
+def test_a_file_that_comes_back_empty_is_named_in_the_digest():
+    """Visible failure beats silent omission."""
+    payload = {"tree": _blobs("README.md", "main.py")}
+    with _client(payload, file_text="") as c:
+        out = tools.build_digest("https://github.com/o/r", c, budget=40_000)
+
+    assert "Could not fetch" in out
+    assert "GitHub returned no content" in out

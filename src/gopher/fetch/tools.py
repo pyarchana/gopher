@@ -56,7 +56,9 @@ def build_digest(repo_url: str, client: httpx.Client, budget: int = DIGEST_BUDGE
         if cap < MIN_FILE_CHARS:
             break
         try:
-            content = fetch_file_content(owner, repo, item["path"], client, max_chars=cap)
+            content = fetch_file_content(
+                owner, repo, item["path"], client, max_chars=cap, expected_size=item.get("size")
+            )
         except Exception as e:
             section = f"### `{item['path']}`\n\n> ⚠️ Could not fetch: {e}"
             file_sections.append(section)
