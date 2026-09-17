@@ -193,6 +193,19 @@ def test_files_below_the_floor_are_skipped():
     assert "0 of 2 shown" in out
 
 
+def test_every_count_in_the_heading_is_formatted_the_same():
+    """The regression test for #23.
+
+    astral-sh/uv's heading read "4 of 1580 shown, 1,576 omitted": one count
+    had a thousands separator and the other did not.
+    """
+    out = _digest_within(10_000, n_files=1_200, file_chars=5_000)
+    heading = next(line for line in out.splitlines() if line.startswith("## Files ("))
+
+    assert "of 1,200 shown" in heading
+    assert "1200" not in heading
+
+
 def test_the_file_count_is_no_longer_fixed_at_ten():
     out = _digest_within(40_000, n_files=200, file_chars=300)
     assert out.count("### `") > 10

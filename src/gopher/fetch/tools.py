@@ -191,7 +191,7 @@ def build_digest(repo_url: str, client: httpx.Client, budget: int = DIGEST_BUDGE
 
 ---
 
-## Files ({included} of {len(ranked)} shown{budget_note})
+## Files ({included:,} of {len(ranked):,} shown{budget_note})
 
 {chr(10).join(file_sections)}
 """
