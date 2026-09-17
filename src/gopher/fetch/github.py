@@ -112,7 +112,15 @@ def fetch_file_content(
     return raw
 
 
-def build_tree_string(blobs: list[dict], max_chars: int | None = None) -> str:
+class TreeRender(NamedTuple):
+    """A rendered tree, plus how much of it survived the character cap."""
+
+    text: str
+    shown: int
+    total: int
+
+
+def build_tree_string(blobs: list[dict], max_chars: int | None = None) -> TreeRender:
     """Render an ASCII directory tree from a flat blob list.
 
     With *max_chars* the render stops at a line boundary and says how many
@@ -141,14 +149,14 @@ def build_tree_string(blobs: list[dict], max_chars: int | None = None) -> str:
     render(tree)
 
     if max_chars is None:
-        return "\n".join(lines)
+        return TreeRender("\n".join(lines), len(lines), len(lines))
 
     kept: list[str] = []
     used = 0
     for i, line in enumerate(lines):
         if used + len(line) + 1 > max_chars:
             kept.append(f"... and {len(lines) - i:,} more entries, omitted to fit the digest")
-            break
+            return TreeRender("\n".join(kept), i, len(lines))
         kept.append(line)
         used += len(line) + 1
-    return "\n".join(kept)
+    return TreeRender("\n".join(kept), len(lines), len(lines))
