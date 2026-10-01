@@ -10,13 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
-    "fastmcp>=4.0.3",
+    "fastmcp>=4.0.10",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.3",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.1.1", "ruff==0.16.6"]
+dev = ["pytest>=9.1.1", "ruff==0.16.9"]
 
 [project.urls]
 Homepage = "https://github.com/pyarchana/gopher"
